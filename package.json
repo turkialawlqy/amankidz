@@ -1,0 +1,10 @@
+{
+  "name": "amankidz-workspace",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix webos-tv run dev",
+    "build": "npm --prefix webos-tv run build",
+    "package": "npm --prefix webos-tv run package",
+    "test": "npm --prefix webos-tv run test"
+  }
+}
