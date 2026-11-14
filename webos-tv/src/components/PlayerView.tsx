@@ -1105,7 +1105,10 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
   // -------------------------------------------------------------------------
   if (remainingMinutes != null && remainingMinutes <= 0 && !dismissBedtime) {
     return (
-      <div className="fixed inset-0 z-50 bg-[#070B14] flex flex-col items-center justify-center text-center p-8 select-none text-white overflow-hidden">
+      <div
+        data-tv-modal-root
+        className="fixed inset-0 z-50 bg-[#070B14] flex flex-col items-center justify-center text-center p-8 select-none text-white overflow-hidden"
+      >
         {/* خلفية النجوم المتلألئة */}
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/40 via-[#070B14] to-black" />
         
@@ -1143,6 +1146,13 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
 
   return (
     <div
+      // نحصر البحث عن العناصر القابلة للتركيز داخل جذر المشغّل فقط (نفس ما تفعله
+      // كل النوافذ الأخرى في التطبيق عبر [data-tv-modal-root]) — بدون هذا،
+      // تبقى HomeScreen مُركّبة خلف الفيديو (لحفظ حالتها) وتدخل أزرارها ضمن
+      // نتائج navigateSpatial فتخطف التركيز من أزرار المشغّل الظاهرة فعلياً.
+      // في وضع PiP الصغير نترك الشاشة الرئيسية خلفه قابلة للتنقل بعمد (هذا هو
+      // الغرض من الوضع المصغّر: تصفح الشاشة الرئيسية أثناء تشغيل صغير جانبي).
+      {...(!isPipMode ? { 'data-tv-modal-root': '' } : {})}
       className={
         isPipMode
           ? "fixed bottom-8 left-8 w-[400px] h-[225px] z-50 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] border-2 border-[#38BDF8] overflow-hidden bg-black flex items-center justify-center select-none group"
