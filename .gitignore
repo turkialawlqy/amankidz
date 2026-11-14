@@ -1,0 +1,15 @@
+.gradle/
+build/
+app/build/
+local.properties
+.idea/
+*.iml
+keystore/
+*.jks
+*.keystore
+node_modules/
+dist/
+webos-tv/node_modules/
+webos-tv/dist/
+.DS_Store
+Thumbs.db

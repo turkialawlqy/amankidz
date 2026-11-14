@@ -1,0 +1,20 @@
+{
+  "id": "com.turkialawlqy.aman",
+  "version": "3.2.0",
+  "vendor": "TurkiAlawlqy",
+  "type": "web",
+  "main": "index.html",
+  "title": "أمان كيدز TV",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "splashBackground": "#181C2B",
+  "uiRevision": "2",
+  "resolution": "1920x1080",
+  "supportGpu": true,
+  "requiredPermissions": [
+    "network.query"
+  ],
+  "accessibility": {
+    "supportsAudioGuidance": false
+  }
+}
