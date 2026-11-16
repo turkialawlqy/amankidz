@@ -5,13 +5,15 @@ import { spawnSync } from 'child_process';
 
 // نفضّل أداة webOS CLI الرسمية (ares-package) عند توفرها على الجهاز بدل
 // الباني اليدوي أدناه، لأنها الأداة المعتمدة من LG وتضمن توافقاً كاملاً
+// يُرجع 'ok' | 'not-found' | 'failed' حتى تكون رسالة التراجع دقيقة (أداة غير
+// مثبّتة هو سبب مختلف تماماً عن أداة موجودة لكنها فشلت لسبب آخر في appinfo.json)
 function tryOfficialAresPackage() {
   const check = spawnSync('ares-package', ['--version'], { stdio: 'ignore', shell: true });
-  if (check.error || check.status !== 0) return false;
+  if (check.error || check.status !== 0) return 'not-found';
 
   console.log('🔧 وُجدت أداة ares-package الرسمية — سيتم استخدامها بدل الباني اليدوي...');
   const res = spawnSync('ares-package', ['dist', '-o', '.'], { stdio: 'inherit', shell: true });
-  return !res.error && res.status === 0;
+  return !res.error && res.status === 0 ? 'ok' : 'failed';
 }
 
 // دالة لكتابة ترويسة TAR (USTAR format)
@@ -127,13 +129,18 @@ async function buildIpk() {
   const appVersion = appinfo.version || '1.0.0';
   const ipkName = `${appId}_${appVersion}_all.ipk`;
 
-  if (tryOfficialAresPackage()) {
+  const aresResult = tryOfficialAresPackage();
+  if (aresResult === 'ok') {
     console.log('✅ تم إنشاء حزمة IPK عبر ares-package الرسمية.');
     return;
   }
 
   console.log(`Packaging webOS IPK for ${appId} v${appVersion}...`);
-  console.log('   (ares-package غير مثبّتة على هذا الجهاز؛ سيُستخدم الباني اليدوي البديل)');
+  console.log(
+    aresResult === 'failed'
+      ? '   (ares-package مثبّتة لكنها فشلت أعلاه؛ سيُستخدم الباني اليدوي البديل — راجع رسالة الخطأ أعلاه)'
+      : '   (ares-package غير مثبّتة على هذا الجهاز؛ سيُستخدم الباني اليدوي البديل)'
+  );
 
   // 1) debian-binary
   const debianBinary = Buffer.from('2.0\n', 'utf8');

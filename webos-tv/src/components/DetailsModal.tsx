@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import type { ContentItem } from '../types';
 import { getStartPosition } from '../services/resume';
+import { RatingBadge } from './RatingBadge';
+import { searchTmdbByTitle, type TmdbCastMember } from '../services/tmdb';
 
 interface DetailsModalProps {
   item: ContentItem;
@@ -29,6 +31,27 @@ export const DetailsModal: React.FC<DetailsModalProps> = ({
   const playButtonRef = useRef<HTMLButtonElement>(null);
   const backButtonRef = useRef<HTMLButtonElement>(null);
   const isSeries = item.kind === 'mix' || episodes.length > 0;
+
+  // طاقم تمثيل احتياطي من TMDB فقط عندما لا يوجد cast_list حقيقي من المصدر
+  const [tmdbCast, setTmdbCast] = useState<TmdbCastMember[]>([]);
+  useEffect(() => {
+    if (item.cast_list && item.cast_list.length > 0) {
+      setTmdbCast([]);
+      return;
+    }
+    let active = true;
+    searchTmdbByTitle(item.title, item.year, isSeries ? 'series' : 'movie').then((match) => {
+      if (active && match?.cast) setTmdbCast(match.cast);
+    });
+    return () => {
+      active = false;
+    };
+  }, [item.id, item.title, item.year, item.cast_list, isSeries]);
+
+  const displayCast: { name: string; character?: string | null; photo?: string | null }[] =
+    item.cast_list && item.cast_list.length > 0
+      ? item.cast_list
+      : tmdbCast.map((c) => ({ name: c.name, character: c.character, photo: c.photoUrl }));
 
   // استخراج قائمة المواسم المتاحة
   const seasons = useMemo(() => {
@@ -130,19 +153,20 @@ export const DetailsModal: React.FC<DetailsModalProps> = ({
   const backdropImg = item.backdrop_url || item.thumbnail_url || posterImg;
 
   return (
-    <div data-tv-modal-root className="fixed inset-0 z-40 bg-[#0E131F] text-white flex flex-col w-screen h-screen overflow-hidden select-none">
+    <div data-tv-modal-root className="fixed inset-0 z-40 bg-[#0B0B0D] text-white flex flex-col w-screen h-screen overflow-hidden select-none">
       {/* البنر العلوي العريض والخلفية الشاملة */}
-      <div className="relative w-full h-[46vh] flex-shrink-0 overflow-hidden">
+      <div className="relative w-full h-[60vh] flex-shrink-0 overflow-hidden">
         {backdropImg ? (
           <img
             src={backdropImg}
             alt={item.title}
-            className="w-full h-full object-cover object-center opacity-40 scale-105 filter blur-sm"
+            className="w-full h-full object-cover object-center atv-ken-burns"
           />
         ) : (
-          <div className="w-full h-full bg-[#131B2E]" />
+          <div className="w-full h-full bg-[#1C1C1E]" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0E131F] via-[#0E131F]/70 to-black/60" />
+        <div className="absolute inset-0 bg-gradient-to-l from-black/85 via-black/35 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0D] via-[#0B0B0D]/25 to-black/30" />
 
         {/* شريط الأدوات العلوي مع زر الرجوع */}
         <div className="absolute top-8 right-12 left-12 flex items-center justify-between z-20">
@@ -150,13 +174,13 @@ export const DetailsModal: React.FC<DetailsModalProps> = ({
             ref={backButtonRef}
             onClick={onClose}
             tabIndex={0}
-            className="tv-focusable bg-black/60 hover:bg-[#2FD3BF] hover:text-[#0E1A24] focus:bg-[#2FD3BF] focus:text-[#0E1A24] px-6 py-3 rounded-2xl border border-white/20 font-bold text-lg flex items-center gap-3 transition"
+            className="atv-btn-glass px-5 h-11 rounded-full font-bold text-base flex items-center gap-2"
           >
             <span className="text-xl">←</span>
-            <span>الرجوع (Back)</span>
+            <span>رجوع</span>
           </button>
 
-          <div className="flex items-center gap-3 bg-black/40 px-5 py-2.5 rounded-2xl border border-white/10 text-base font-bold text-[#A7ADBF]">
+          <div className="flex items-center gap-3 atv-glass px-5 h-11 rounded-full text-sm font-bold text-white/70">
             <span>📺</span>
             <span>{isSeries ? 'مسلسل' : 'فيلم'}</span>
             <span>•</span>
@@ -165,10 +189,10 @@ export const DetailsModal: React.FC<DetailsModalProps> = ({
         </div>
 
         {/* معلومات المحتوى الرئيسية (البوستر + العنوان + الأزرار) */}
-        <div className="absolute bottom-6 right-12 left-12 flex items-end gap-8 z-10">
+        <div className="absolute bottom-8 right-16 left-16 flex items-end gap-8 z-10 atv-rise">
           {/* بوستر العمل */}
           {posterImg && (
-            <div className="w-44 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 flex-shrink-0 hidden md:block bg-[#1B2438]">
+            <div className="w-40 aspect-[2/3] rounded-xl overflow-hidden shadow-2xl flex-shrink-0 hidden md:block bg-[#2C2C2E]">
               <img src={posterImg} alt={item.title} className="w-full h-full object-cover" />
             </div>
           )}
@@ -181,8 +205,9 @@ export const DetailsModal: React.FC<DetailsModalProps> = ({
                   {item.year}
                 </span>
               )}
+              <RatingBadge title={item.title} year={item.year} kind={isSeries ? 'series' : 'movie'} />
               {isSeries && episodes.length > 0 && (
-                <span className="text-xs font-black bg-[#2FD3BF] text-[#0E1A24] px-3 py-1 rounded-lg">
+                <span className="text-xs font-black bg-[#FFFFFF] text-[#0B0B0D] px-3 py-1 rounded-lg">
                   {episodes.length} حلقة
                 </span>
               )}
@@ -195,18 +220,18 @@ export const DetailsModal: React.FC<DetailsModalProps> = ({
                 مناسب للأطفال ✓
               </span>
               {item.genres?.map((g, i) => (
-                <span key={i} className="text-xs text-[#A7ADBF] bg-white/5 px-2.5 py-1 rounded-lg">
+                <span key={i} className="text-xs text-[#A1A1A6] bg-white/5 px-2.5 py-1 rounded-lg">
                   {g}
                 </span>
               ))}
             </div>
 
-            <h1 className="text-3xl lg:text-4xl font-black text-white mb-3 drop-shadow-md leading-tight">
+            <h1 className="text-5xl font-extrabold text-white mb-3 atv-text-shadow leading-tight">
               {item.title}
             </h1>
 
             {item.description && (
-              <p className="text-sm lg:text-base text-[#CBD5E1] line-clamp-2 leading-relaxed max-w-2xl drop-shadow">
+              <p className="text-sm lg:text-base text-[#D1D1D6] line-clamp-2 leading-relaxed max-w-2xl drop-shadow">
                 {item.description}
               </p>
             )}
@@ -217,7 +242,7 @@ export const DetailsModal: React.FC<DetailsModalProps> = ({
             ref={playButtonRef}
             tabIndex={0}
             onClick={handleMainPlay}
-            className="tv-focusable bg-[#2FD3BF] text-[#0E1A24] font-black text-xl px-10 py-4 rounded-xl shadow-2xl hover:scale-105 focus:ring-4 focus:ring-white flex items-center gap-3.5 flex-shrink-0 transition-transform"
+            className="atv-btn-primary font-bold text-xl px-10 h-16 rounded-xl flex items-center gap-3.5 flex-shrink-0"
           >
             <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
               <path d="M8 5v14l11-7z" />
@@ -228,24 +253,24 @@ export const DetailsModal: React.FC<DetailsModalProps> = ({
       </div>
 
       {/* الجزء السفلي: المواسم ودفعات الحلقات وشبكة الحلقات */}
-      <div className="flex-1 overflow-y-auto px-10 py-5 space-y-5">
+      <div className="flex-1 overflow-y-auto px-16 py-5 space-y-5">
         {episodes.length > 0 && (
           <div className="space-y-4">
             {/* أشرطة التبويبات (المواسم + الدفعات) */}
-            <div className="flex items-center justify-between border-b border-white/10 pb-3 flex-wrap gap-3">
+            <div className="flex items-center justify-between pb-3 flex-wrap gap-3">
               {/* شريط المواسم */}
               {seasons.length > 1 ? (
                 <div className="flex items-center gap-2.5 overflow-x-auto pb-1">
-                  <span className="text-base font-bold text-[#A7ADBF] ml-1">الموسم:</span>
+                  <span className="text-base font-bold text-[#A1A1A6] ml-1">الموسم:</span>
                   {seasons.map((sn) => (
                     <button
                       key={sn}
                       tabIndex={0}
                       onClick={() => setSelectedSeason(sn)}
-                      className={`tv-focusable px-6 py-2.5 rounded-xl text-base font-bold transition-all ${
+                      className={`tv-focusable px-6 py-2.5 rounded-full text-base font-bold transition-all ${
                         selectedSeason === sn
-                          ? 'bg-[#2FD3BF] text-[#0E1A24] shadow-md font-black'
-                          : 'bg-[#1A2234] text-[#A7ADBF] hover:bg-[#26314A] hover:text-white'
+                          ? 'bg-white/20 text-white font-black focus:bg-[#FFFFFF] focus:text-[#0B0B0D]'
+                          : 'bg-white/[0.06] text-white/60 hover:bg-white/10 hover:text-white focus:bg-[#FFFFFF] focus:text-[#0B0B0D]'
                       }`}
                     >
                       الموسم {sn}
@@ -255,7 +280,7 @@ export const DetailsModal: React.FC<DetailsModalProps> = ({
               ) : (
                 <div className="flex items-center gap-2.5">
                   <h2 className="text-2xl font-black text-white">قائمة الحلقات</h2>
-                  <span className="text-xs font-bold bg-[#2FD3BF]/20 text-[#2FD3BF] px-3 py-1 rounded-full border border-[#2FD3BF]/30">
+                  <span className="text-xs font-bold bg-[#FFFFFF]/20 text-[#FFFFFF] px-3 py-1 rounded-full border border-[#FFFFFF]/30">
                     {seasonEpisodes.length} حلقة متوفرة
                   </span>
                 </div>
@@ -264,7 +289,7 @@ export const DetailsModal: React.FC<DetailsModalProps> = ({
               {/* شريط الدفعات للمسلسلات الطويلة */}
               {totalBatches > 1 && (
                 <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                  <span className="text-sm font-bold text-[#A7ADBF] ml-1">المجموعة:</span>
+                  <span className="text-sm font-bold text-[#A1A1A6] ml-1">المجموعة:</span>
                   {Array.from({ length: totalBatches }).map((_, bIdx) => {
                     const fromEp = bIdx * BATCH_SIZE + 1;
                     const toEp = Math.min((bIdx + 1) * BATCH_SIZE, seasonEpisodes.length);
@@ -273,10 +298,10 @@ export const DetailsModal: React.FC<DetailsModalProps> = ({
                         key={bIdx}
                         tabIndex={0}
                         onClick={() => setSelectedBatch(bIdx)}
-                        className={`tv-focusable px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                        className={`tv-focusable px-4 py-2 rounded-full text-sm font-bold transition-all ${
                           selectedBatch === bIdx
-                            ? 'bg-[#2FD3BF] text-[#0E1A24] shadow-sm font-black'
-                            : 'bg-[#1A2234] text-[#A7ADBF] hover:bg-[#26314A] hover:text-white'
+                            ? 'bg-white/20 text-white font-black focus:bg-[#FFFFFF] focus:text-[#0B0B0D]'
+                            : 'bg-white/[0.06] text-white/60 hover:bg-white/10 hover:text-white focus:bg-[#FFFFFF] focus:text-[#0B0B0D]'
                         }`}
                       >
                         {fromEp} - {toEp}
@@ -301,23 +326,23 @@ export const DetailsModal: React.FC<DetailsModalProps> = ({
                     id={`ep-btn-${ep.id}`}
                     tabIndex={0}
                     onClick={() => handlePlayEpisode(ep)}
-                    className={`tv-focusable p-3.5 rounded-xl text-right flex items-center justify-between group transition-all shadow-md border ${
+                    className={`tv-focusable p-4 rounded-2xl text-right flex items-center justify-between group transition-all shadow-md border ${
                       isCurrent
-                        ? 'bg-[#1E293B] border-[#2FD3BF]'
-                        : 'bg-[#161E2E] border-white/5 hover:bg-[#1E293B]'
-                    } focus:bg-[#2FD3BF] focus:text-[#0E1A24] focus:border-white`}
+                        ? 'bg-white/[0.12] border-white/40'
+                        : 'bg-white/[0.06] border-transparent hover:bg-white/10'
+                    } focus:bg-[#FFFFFF] focus:text-[#0B0B0D] focus:border-white`}
                   >
                     <div className="flex items-center gap-3 truncate flex-1">
-                      <span className="w-10 h-10 rounded-xl bg-black/40 group-focus:bg-black/15 flex items-center justify-center text-base font-black text-[#2FD3BF] group-focus:text-[#0E1A24] flex-shrink-0">
+                      <span className="w-10 h-10 rounded-xl bg-black/40 group-focus:bg-black/15 flex items-center justify-center text-base font-black text-[#FFFFFF] group-focus:text-[#0B0B0D] flex-shrink-0">
                         {isWatched ? '✓' : '▶'}
                       </span>
-                      <span className="font-bold text-base truncate group-focus:text-[#0E1A24]">
+                      <span className="font-bold text-base truncate group-focus:text-[#0B0B0D]">
                         {displayTitle}
                       </span>
                     </div>
 
                     {isWatched && (
-                      <span className="text-xs font-black bg-[#2FD3BF]/20 text-[#2FD3BF] group-focus:bg-black/10 group-focus:text-[#0E1A24] px-2 py-0.5 rounded-md mr-1.5 flex-shrink-0">
+                      <span className="text-xs font-black bg-[#FFFFFF]/20 text-[#FFFFFF] group-focus:bg-black/10 group-focus:text-[#0B0B0D] px-2 py-0.5 rounded-md mr-1.5 flex-shrink-0">
                         متابعة
                       </span>
                     )}
@@ -328,14 +353,14 @@ export const DetailsModal: React.FC<DetailsModalProps> = ({
           </div>
         )}
 
-        {/* طاقم العمل إذا توفر */}
-        {item.cast_list && item.cast_list.length > 0 && (
-          <div className="pt-6 border-t border-white/10 pb-8">
+        {/* طاقم العمل إذا توفر (من المصدر مباشرة أو احتياطياً من TMDB) */}
+        {displayCast.length > 0 && (
+          <div className="pt-6 pb-8">
             <h3 className="text-2xl font-bold text-white mb-4">طاقم العمل</h3>
             <div className="flex gap-6 overflow-x-auto pb-4">
-              {item.cast_list.map((c, i) => (
+              {displayCast.map((c, i) => (
                 <div key={i} className="flex-shrink-0 w-32 flex flex-col items-center text-center">
-                  <div className="w-20 h-20 rounded-full overflow-hidden bg-[#1A2234] mb-2 border border-white/10">
+                  <div className="w-20 h-20 rounded-full overflow-hidden bg-[#1C1C1E] mb-2 border border-white/10">
                     {c.photo ? (
                       <img src={c.photo} alt={c.name} className="w-full h-full object-cover" />
                     ) : (
@@ -344,7 +369,7 @@ export const DetailsModal: React.FC<DetailsModalProps> = ({
                   </div>
                   <span className="text-sm font-bold text-white truncate w-full">{c.name}</span>
                   {c.character && (
-                    <span className="text-xs text-[#A7ADBF] truncate w-full">{c.character}</span>
+                    <span className="text-xs text-[#A1A1A6] truncate w-full">{c.character}</span>
                   )}
                 </div>
               ))}

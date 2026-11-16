@@ -7,14 +7,16 @@
   "title": "أمان كيدز TV",
   "icon": "icon.png",
   "largeIcon": "largeIcon.png",
-  "splashBackground": "#181C2B",
+  "splashBackground": "#0B0B0D",
   "uiRevision": "2",
   "resolution": "1920x1080",
   "supportGpu": true,
   "requiredPermissions": [
     "network.query"
   ],
+  "requiredACG": [],
   "accessibility": {
     "supportsAudioGuidance": false
-  }
+  },
+  "disableBackHistoryAPI": true
 }

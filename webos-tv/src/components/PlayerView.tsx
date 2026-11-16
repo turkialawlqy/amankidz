@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { AtvSpinner } from './AtvSpinner';
+import { AtvToast } from './AtvAlert';
 import Hls from 'hls.js';
 import type { ContentItem, Device, LiveChannel } from '../types';
 import { WEBOS_KEYS, navigateSpatial, shouldHandleBackPress } from '../hooks/useRemoteKeys';
@@ -62,6 +64,9 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
   const playPauseRef = useRef<HTMLButtonElement>(null);
 
   const [isPlaying, setIsPlaying] = useState(true);
+  const [isBuffering, setIsBuffering] = useState(true);
+  // أثناء شاشة الانتظار الأولى يكون شريط التحكم مخفياً بصرياً
+  const initialLoadingRef = useRef(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [showControls, setShowControls] = useState(true);
@@ -356,7 +361,17 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
         }
       });
     } else {
+      // للحلقات والأفلام: نكمل من نفس الثانية بدل البداية، ومع الصوت
+      const resumeAt = !isLive ? lastPositionRef.current : 0;
       video.src = nextUrl;
+      if (resumeAt > 1) {
+        const onMeta = () => {
+          video.removeEventListener('loadedmetadata', onMeta);
+          try { video.currentTime = resumeAt; } catch {}
+        };
+        video.addEventListener('loadedmetadata', onMeta);
+      }
+      video.muted = false;
       video.play().catch(console.warn);
       setReconnectToast('✅ تم التبديل للبث البديل بنجاح');
       setTimeout(() => setReconnectToast(null), 3500);
@@ -446,6 +461,15 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
 
 
 
+  // تحديثات الجهاز اللحظية (Realtime) تنشئ كائن device جديد كل مرة؛ لو كانت
+  // blocked_words ضمن اعتماديات مؤثر التشغيل كان الفيديو يُعاد تحميله فجأة
+  // أثناء المشاهدة (يوقف ثم يرجع بدون صوت). نقرأها من ref بدل ذلك.
+  const mediaRecoverAtRef = useRef(0);
+  const lastVideoErrorAtRef = useRef(0);
+  const blockedWordsRef = useRef<string[]>(device.blocked_words || []);
+  blockedWordsRef.current = device.blocked_words || [];
+  const profanityMutedRef = useRef(false);
+
   const resetControlsTimeout = useCallback(() => {
     setShowControls(true);
     if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
@@ -478,6 +502,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
 
     setErrorMessage(null);
     setCurrentTime(0);
+    setIsBuffering(true);
     lastPositionRef.current = 0;
 
     const isHls =
@@ -502,11 +527,8 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
         v.currentTime = 0;
       }
 
-      v.play().catch((e) => {
-        console.warn('Autoplay prevented:', e);
-        v.muted = true;
-        v.play().catch((err) => console.error('Play failed completely:', err));
-      });
+      v.muted = false;
+      v.play().catch((e) => console.warn('Play error:', e));
     };
 
     if (isHls && Hls.isSupported()) {
@@ -595,9 +617,15 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
               console.warn('HLS Network Error, initiating stream failover...');
               handleSwitchStreamSource(true);
               break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
+            case Hls.ErrorTypes.MEDIA_ERROR: {
+              const now = Date.now();
+              if (now - mediaRecoverAtRef.current < 3000) {
+                hls?.swapAudioCodec();
+              }
+              mediaRecoverAtRef.current = now;
               hls?.recoverMediaError();
               break;
+            }
             default:
               if (streamUrl.includes('.m3u8')) {
                 const tsUrl = streamUrl.replace(/\.m3u8$/, '.ts');
@@ -636,14 +664,16 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
               const cue = cues[j] as VTTCue;
               const rawText = cue.text || '';
               setActiveSubtitleText(rawText);
-              const blockedWords = device.blocked_words || [];
+              const blockedWords = blockedWordsRef.current;
               const hasBad = subtitleHasBlockedWord(rawText, blockedWords);
               if (hasBad && !video.muted) {
                 console.log('Profanity Shield: Bad word detected, muting audio...');
                 video.muted = true;
+                profanityMutedRef.current = true;
                 setIsProfanityMuted(true);
                 setTimeout(() => {
                   if (video) video.muted = false;
+                  profanityMutedRef.current = false;
                   setIsProfanityMuted(false);
                 }, 3500);
               }
@@ -671,7 +701,8 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
       if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     };
-  }, [item, youtubeVideoId, isLive, retryCount, device.blocked_words, resetControlsTimeout, triggerReconnect, activeProfileId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id, item.url, youtubeVideoId, isLive, retryCount, resetControlsTimeout, triggerReconnect]);
 
   // تتبع الوقت ومزامنة التقدم لميزة "أكمل المشاهدة"
   const handleTimeUpdate = () => {
@@ -852,6 +883,8 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
     }
   };
 
+  initialLoadingRef.current = isBuffering && currentTime < 1 && !errorMessage;
+
   // إغلاق المشغل مع الحفظ الفوري لآخر ثانية تمت مشاهدتها
   const handleSafeClose = useCallback(() => {
     if (videoRef.current && !isLive) {
@@ -981,7 +1014,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
           return;
         }
 
-        if (showControlsRef.current) {
+        if (showControlsRef.current && !initialLoadingRef.current) {
           setShowControls(false);
           if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
           return;
@@ -1107,10 +1140,10 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
     return (
       <div
         data-tv-modal-root
-        className="fixed inset-0 z-50 bg-[#070B14] flex flex-col items-center justify-center text-center p-8 select-none text-white overflow-hidden"
+        className="fixed inset-0 z-50 bg-[#0B0B0D] flex flex-col items-center justify-center text-center p-8 select-none text-white overflow-hidden"
       >
         {/* خلفية النجوم المتلألئة */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/40 via-[#070B14] to-black" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/40 via-[#0B0B0D] to-black" />
         
         <div className="relative z-10 flex flex-col items-center max-w-xl">
           <div className="text-8xl mb-6 animate-pulse drop-shadow-[0_0_35px_rgba(253,224,71,0.5)]">
@@ -1119,7 +1152,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
           <h1 className="text-4xl font-black mb-4 text-[#FDE047]">
             حان وقت النوم والراحة يا بطل! 😴
           </h1>
-          <p className="text-lg text-[#94A3B8] leading-relaxed mb-8">
+          <p className="text-lg text-[#A1A1A6] leading-relaxed mb-8">
             انتهى وقت المشاهدة المخصص لليوم. لنأخذ قسطاً من الراحة والنوم لنستيقظ غداً بكل نشاط ومرح!
           </p>
 
@@ -1127,7 +1160,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
             <button
               tabIndex={0}
               onClick={onClose}
-              className="tv-focusable bg-[#38BDF8] text-[#0A101D] font-black text-lg px-8 py-3.5 rounded-2xl shadow-xl hover:scale-105 transition"
+              className="tv-focusable bg-[#FFFFFF] text-[#0B0B0D] font-black text-lg px-8 py-3.5 rounded-2xl shadow-xl hover:scale-105 transition"
             >
               إغلاق الشاشة الآن 😴
             </button>
@@ -1155,7 +1188,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
       {...(!isPipMode ? { 'data-tv-modal-root': '' } : {})}
       className={
         isPipMode
-          ? "fixed bottom-8 left-8 w-[400px] h-[225px] z-50 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] border-2 border-[#38BDF8] overflow-hidden bg-black flex items-center justify-center select-none group"
+          ? "fixed bottom-8 left-8 w-[400px] h-[225px] z-50 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] border-2 border-[#FFFFFF] overflow-hidden bg-black flex items-center justify-center select-none group"
           : "fixed inset-0 z-50 bg-black flex items-center justify-center select-none"
       }
       onClick={() => {
@@ -1173,59 +1206,50 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
     >
       {/* إشعار كتم الألفاظ غير الملائمة تلقائياً (Profanity Shield) */}
       {isProfanityMuted && (
-        <div className="absolute top-8 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-[#0A101D] px-6 py-2.5 rounded-full font-black text-sm shadow-2xl flex items-center gap-2 animate-pulse">
-          <span>🛡️</span>
-          <span>درع الأمان: تم كتم لفظ غير ملائم تلقائياً</span>
-        </div>
+        <AtvToast tone="ok" icon="🛡️" top={100}>درع الأمان: تم كتم لفظ غير ملائم</AtvToast>
       )}
 
       {/* شارة رقم القناة عند الضغط على الأرقام بالريموت (Channel Number Overlay) */}
       {channelNumberInput && (
-        <div className="absolute top-10 right-10 z-50 bg-[#0F172A]/95 backdrop-blur-md border-2 border-[#38BDF8] px-8 py-4 rounded-2xl shadow-2xl flex items-center gap-4 animate-in zoom-in-95">
+        <div className="absolute top-10 right-10 z-50 atv-osd-glass px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-4 atv-rise">
           <span className="text-3xl">📺</span>
-          <span className="text-5xl font-mono font-black text-[#38BDF8] tracking-widest">
+          <span className="text-5xl font-mono font-black text-[#FFFFFF] tracking-widest">
             {channelNumberInput}
           </span>
-          <span className="text-xs text-[#94A3B8] font-bold">قناة</span>
+          <span className="text-xs text-[#A1A1A6] font-bold">قناة</span>
         </div>
       )}
 
       {/* إشعار التنقل بين القنوات */}
       {channelZappingToast && (
-        <div className="absolute top-10 right-10 z-50 bg-[#0F172A]/90 backdrop-blur-md border border-[#38BDF8]/60 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-in fade-in">
-          <span className="text-base font-black">{channelZappingToast}</span>
-        </div>
+        <AtvToast top={40}>{channelZappingToast}</AtvToast>
       )}
 
       {/* إشعار اختيار الصوت العربي التلقائي */}
       {audioToast && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 bg-[#0F172A]/95 backdrop-blur-md border border-emerald-500/50 text-emerald-400 px-6 py-2.5 rounded-full font-bold text-sm shadow-2xl flex items-center gap-2 animate-in fade-in">
-          <span>{audioToast}</span>
-        </div>
-      )}
+            <AtvToast tone="info" top={100}>{audioToast}</AtvToast>
+          )}
 
       {/* إشعار التبديل وإعادة الاتصال */}
       {reconnectToast && (
-        <div className="absolute top-8 left-1/2 -translate-x-1/2 z-50 bg-sky-600/90 text-white px-6 py-2.5 rounded-full font-bold text-sm shadow-2xl flex items-center gap-2 animate-in fade-in">
-          <span>{reconnectToast}</span>
-        </div>
-      )}
+            <AtvToast tone="ok" top={40}>{reconnectToast}</AtvToast>
+          )}
 
       {/* شاشة الفحص الفني المباشر (Stream Diagnostics HUD) */}
       {showDiagnosticsHud && !isPipMode && (
         <div
-          className="absolute top-24 left-8 z-40 bg-black/90 backdrop-blur-md border border-[#38BDF8]/40 rounded-2xl p-5 text-white max-w-sm shadow-[0_10px_35px_rgba(0,0,0,0.85)] select-none text-right animate-in fade-in"
+          className="absolute top-24 left-8 z-40 bg-black/90 backdrop-blur-md border border-[#FFFFFF]/40 rounded-2xl p-5 text-white max-w-sm shadow-[0_10px_35px_rgba(0,0,0,0.85)] select-none text-right animate-in fade-in"
           dir="rtl"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/10">
             <div className="flex items-center gap-2">
               <span className="text-xl">📊</span>
-              <h3 className="text-sm font-black text-[#38BDF8]">فحص جودة وأداء البث (HUD)</h3>
+              <h3 className="text-sm font-black text-[#FFFFFF]">فحص جودة وأداء البث (HUD)</h3>
             </div>
             <button
               onClick={() => setShowDiagnosticsHud(false)}
-              className="text-[#94A3B8] hover:text-white text-xs bg-white/10 hover:bg-white/20 px-2.5 py-1 rounded-md transition"
+              className="text-[#A1A1A6] hover:text-white text-xs bg-white/10 hover:bg-white/20 px-2.5 py-1 rounded-md transition"
               title="إغلاق (الزر الأزرق)"
             >
               ✕
@@ -1234,30 +1258,30 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
 
           <div className="space-y-2 text-xs font-mono">
             <div className="flex items-center justify-between">
-              <span className="text-[#94A3B8] font-sans">الدقة الحالية:</span>
+              <span className="text-[#A1A1A6] font-sans">الدقة الحالية:</span>
               <span className="font-bold text-emerald-400">{hudStats.resolution}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[#94A3B8] font-sans">معدل نقل البيانات:</span>
-              <span className="font-bold text-[#38BDF8]">{hudStats.bitrateMbps} Mbps</span>
+              <span className="text-[#A1A1A6] font-sans">معدل نقل البيانات:</span>
+              <span className="font-bold text-[#FFFFFF]">{hudStats.bitrateMbps} Mbps</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[#94A3B8] font-sans">صحة التخزين المؤقت:</span>
+              <span className="text-[#A1A1A6] font-sans">صحة التخزين المؤقت:</span>
               <span className="font-bold text-amber-400">{hudStats.bufferSec} ثانية</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[#94A3B8] font-sans">الإطارات المفقودة:</span>
+              <span className="text-[#A1A1A6] font-sans">الإطارات المفقودة:</span>
               <span className={`font-bold ${hudStats.droppedFrames === 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {hudStats.droppedFrames} frames
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[#94A3B8] font-sans">نوع البث:</span>
-              <span className="font-bold text-[#CBD5E1]">{hudStats.streamProtocol}</span>
+              <span className="text-[#A1A1A6] font-sans">نوع البث:</span>
+              <span className="font-bold text-[#D1D1D6]">{hudStats.streamProtocol}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[#94A3B8] font-sans">ترميز الفيديو:</span>
-              <span className="font-bold text-[#CBD5E1]">{hudStats.videoCodec}</span>
+              <span className="text-[#A1A1A6] font-sans">ترميز الفيديو:</span>
+              <span className="font-bold text-[#D1D1D6]">{hudStats.videoCodec}</span>
             </div>
           </div>
 
@@ -1265,12 +1289,12 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
             <button
               onClick={() => handleSwitchStreamSource(false)}
               tabIndex={0}
-              className="tv-focusable w-full bg-white/10 hover:bg-[#38BDF8] hover:text-[#0A101D] text-white font-bold text-xs py-2 px-3 rounded-xl transition text-center"
+              className="tv-focusable w-full bg-white/10 hover:bg-[#FFFFFF] hover:text-[#0B0B0D] text-white font-bold text-xs py-2 px-3 rounded-xl transition text-center"
             >
               🔄 تبديل السيرفر / المصدر الاحتياطي
             </button>
           </div>
-          <div className="mt-2 text-[10px] text-[#64748B] text-center font-sans">
+          <div className="mt-2 text-[10px] text-[#6E6E73] text-center font-sans">
             اضغط الزر الأزرق 🔵 بالريموت للإظهار والإخفاء
           </div>
         </div>
@@ -1292,7 +1316,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
               <button
                 tabIndex={0}
                 onClick={() => setIsPipMode(false)}
-                className="tv-focusable bg-[#38BDF8] text-[#0A101D] font-black text-xs px-2.5 py-1 rounded-lg shadow hover:scale-105 transition flex items-center gap-1"
+                className="tv-focusable bg-[#FFFFFF] text-[#0B0B0D] font-black text-xs px-2.5 py-1 rounded-lg shadow hover:scale-105 transition flex items-center gap-1"
                 title="تكبير الشاشة الكاملة (الزر الأصفر)"
               >
                 <span>⛶</span>
@@ -1315,24 +1339,15 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
       )}
       {/* إشعار قفل الأطفال العائم */}
       {lockToast && (
-        <div className="absolute top-8 left-1/2 -translate-x-1/2 z-50 bg-amber-500 text-[#0A101D] px-8 py-3 rounded-2xl font-black text-base shadow-2xl flex items-center gap-2 animate-bounce">
-          <span>{lockToast}</span>
-        </div>
-      )}
+            <AtvToast tone="info" top={40}>{lockToast}</AtvToast>
+          )}
 
-      {/* علامة الوضع الليلي الدافئ لحماية العين */}
-      {nightMode && (
-        <div className="absolute top-6 left-6 z-40 bg-amber-500/10 backdrop-blur-md px-3.5 py-1.5 rounded-xl text-amber-300 font-bold text-xs flex items-center gap-1.5 border border-amber-500/20">
-          <span>🌙</span>
-          <span>وضع راحة العين الدافئ</span>
-        </div>
-      )}
 
       {/* الترجمة المزدوجة لتعليم الإنجليزية (Bilingual Learning Caption) */}
       {bilingualMode && activeSubtitleText && (
         <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30 bg-black/85 backdrop-blur-md px-8 py-3 rounded-2xl text-center border border-white/20 shadow-2xl max-w-2xl animate-in fade-in duration-150">
-          <p className="text-lg font-bold text-[#38BDF8] mb-0.5">{activeSubtitleText}</p>
-          <span className="text-xs text-[#94A3B8] font-bold">🌍 وضع التعلم اللغوي المزدوج</span>
+          <p className="text-lg font-bold text-[#FFFFFF] mb-0.5">{activeSubtitleText}</p>
+          <span className="text-xs text-[#A1A1A6] font-bold">🌍 وضع التعلم اللغوي المزدوج</span>
         </div>
       )}
 
@@ -1348,13 +1363,13 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
           <h2 className="text-3xl font-black text-[#A5B4FC]/90 mb-3">
             وضع الاستماع الهادئ (الشاشة مطفأة) 📻
           </h2>
-          <p className="text-xl text-[#64748B] max-w-lg leading-relaxed mb-8">
+          <p className="text-xl text-[#6E6E73] max-w-lg leading-relaxed mb-8">
             الصوت مستمر في الخلفية بدون إضاءة الشاشة لمساعدتك على النوم الهادئ وتوفير طاقة التلفاز 💤
           </p>
           <button
             tabIndex={0}
             onClick={() => setIsScreenOffMode(false)}
-            className="tv-focusable bg-white/10 hover:bg-white/20 text-[#E2E8F0] font-bold text-lg px-8 py-4 rounded-2xl border border-white/10"
+            className="tv-focusable bg-white/10 hover:bg-white/20 text-[#D1D1D6] font-bold text-lg px-8 py-4 rounded-2xl border border-white/10"
           >
             إعادة إضاءة الشاشة (اضغط أي زر بالريموت) 💡
           </button>
@@ -1386,57 +1401,98 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
               filter: nightMode ? 'sepia(24%) saturate(92%) brightness(95%)' : 'none',
             }}
             onTimeUpdate={handleTimeUpdate}
+            onWaiting={() => setIsBuffering(true)}
+            onSeeking={() => setIsBuffering(true)}
+            onSeeked={() => setIsBuffering(false)}
+            onCanPlay={() => {
+              if (videoRef.current && !videoRef.current.paused) setIsBuffering(false);
+            }}
+            onPause={() => setIsBuffering(false)}
             onEnded={() => {
               lastPositionRef.current = 0;
               if (onNext) onNext();
               else onClose();
             }}
             onError={() => {
+              const now = Date.now();
+              if (now - lastVideoErrorAtRef.current < 4000) return;
+              lastVideoErrorAtRef.current = now;
               console.warn('HTML5 Video error, triggering automatic stream failover...');
               handleSwitchStreamSource(true);
             }}
+            onPlaying={() => {
+              setIsBuffering(false);
+              // ضمان: أي تشغيل بعد توقف/إعادة اتصال يرجع بالصوت (إلا أثناء كتم الألفاظ)
+              const v = videoRef.current;
+              if (v && v.muted && !profanityMutedRef.current) v.muted = false;
+            }}
           />
+
+          {/* شاشة الانتظار بنمط Apple TV */}
+          {isBuffering && !errorMessage && !isPipMode && (
+            currentTime < 1 ? (
+              <div className="absolute inset-0 z-[15] flex flex-col items-center justify-center atv-fade-in pointer-events-none">
+                {(item.backdrop_url || item.thumbnail_url || item.poster_url) && (
+                  <img
+                    src={item.backdrop_url || item.thumbnail_url || item.poster_url || ''}
+                    alt=""
+                    className="absolute inset-0 w-full h-full object-cover opacity-35 blur-xl scale-110"
+                  />
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-black/40" />
+                <div className="relative flex flex-col items-center text-center px-16 atv-rise">
+                  <AtvSpinner size={46} className="mb-7" />
+                  <h2 dir="auto" className="text-[34px] font-extrabold text-white mb-2 max-w-[70vw] truncate">
+                    {item.title}
+                  </h2>
+                  <p className="text-base font-medium text-white/55">
+                    {isLive ? 'جاري الاتصال بالبث…' : lastPositionRef.current > 5 ? 'نكمل من حيث توقفت…' : 'جاري التحضير…'}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="absolute inset-0 z-[15] flex items-center justify-center pointer-events-none atv-fade-in">
+                <div className="w-24 h-24 rounded-full bg-black/45 flex items-center justify-center atv-osd-glass">
+                  <AtvSpinner size={40} />
+                </div>
+              </div>
+            )
+          )}
 
           {/* لافتة إعادة الاتصال التلقائي بالإنترنت */}
           {isReconnecting && (
-            <div className="absolute top-8 left-1/2 -translate-x-1/2 z-50 bg-[#181C2B]/95 border-2 border-amber-500/50 text-white px-8 py-3.5 rounded-2xl shadow-2xl flex items-center gap-4 animate-pulse">
-              <div className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-              <span className="font-extrabold text-base">
-                انقطع الاتصال بالإنترنت، جاري إعادة المحاولة تلقائياً فور عودته…
-              </span>
-            </div>
+            <AtvToast tone="warn" icon={<AtvSpinner size={20} />}>
+              انقطع الاتصال بالإنترنت، نعيد المحاولة تلقائياً فور عودته…
+            </AtvToast>
           )}
 
           {reconnectToast && (
-            <div className="absolute top-8 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-[#0E1A24] px-8 py-3 rounded-2xl font-black text-base shadow-2xl flex items-center gap-3 animate-bounce">
-              <span>{reconnectToast}</span>
-            </div>
+            <AtvToast tone="ok" top={40}>{reconnectToast}</AtvToast>
           )}
 
           {/* رسالة الخطأ وشاشة الاسترداد */}
           {errorMessage && (
-            <div className="absolute inset-0 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-8 text-white z-40">
-              <div className="text-6xl mb-4">⚠️</div>
-              <h2 className="text-2xl font-bold mb-2">تعذر تشغيل البث</h2>
-              <p className="text-sm text-[#A7ADBF] max-w-md text-center mb-6">{errorMessage}</p>
-              <div className="flex gap-4">
-                <button
-                  onClick={() => {
-                    setErrorMessage(null);
-                    setRetryCount((c) => c + 1);
-                  }}
-                  tabIndex={0}
-                  className="tv-focusable bg-[#38BDF8] text-[#0A101D] text-lg font-black px-8 py-3 rounded-xl shadow-lg hover:scale-105"
-                >
-                  إعادة المحاولة الآن 🔄
-                </button>
-                <button
-                  onClick={onClose}
-                  tabIndex={0}
-                  className="tv-focusable bg-white/10 text-white text-lg font-bold px-8 py-3 rounded-xl border border-white/20"
-                >
-                  الرجوع (Back)
-                </button>
+            <div className="absolute inset-0 z-40 flex items-center justify-center atv-fade-in" dir="rtl">
+              <div className="absolute inset-0 bg-black/75" />
+              <div className="relative atv-sheet w-[620px] rounded-[28px] px-10 pt-9 pb-8 text-center atv-rise">
+                <div className="w-16 h-16 mx-auto mb-5 rounded-full bg-[#FF9F0A]/15 text-[#FF9F0A] flex items-center justify-center text-3xl font-black">!</div>
+                <h2 className="text-[26px] font-extrabold text-white mb-2">تعذّر تشغيل المحتوى</h2>
+                <p className="text-base text-white/60 mb-8 leading-relaxed">{errorMessage}</p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setErrorMessage(null);
+                      setRetryCount((c) => c + 1);
+                    }}
+                    tabIndex={0}
+                    className="atv-btn-primary flex-1 h-14 rounded-xl text-lg font-bold"
+                  >
+                    إعادة المحاولة
+                  </button>
+                  <button onClick={onClose} tabIndex={0} className="atv-btn-glass flex-1 h-14 rounded-xl text-lg font-bold">
+                    رجوع
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -1446,20 +1502,18 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
             <button
               onClick={skipIntro}
               tabIndex={0}
-              className="absolute bottom-28 left-12 z-30 bg-[#2FD3BF] text-[#0E1A24] font-black text-lg px-6 py-3 rounded-2xl shadow-2xl hover:scale-105 focus:ring-4 focus:ring-white transition"
+              className="absolute bottom-16 left-16 z-30 atv-osd-pill !h-14 !px-7 !text-lg atv-rise"
             >
-              ⏩ تخطي المقدمة (اضغط OK)
+              تخطي المقدمة
             </button>
           )}
 
           {/* موجه الانتقال التلقائي للحلقة التالية */}
           {nextCountdown !== null && onNext && (
-            <div className="absolute bottom-28 left-12 z-30 bg-[#181C2B]/95 border-2 border-[#2FD3BF] p-6 rounded-3xl shadow-2xl flex items-center gap-6 animate-pulse">
+            <div dir="rtl" className="absolute bottom-16 left-16 z-30 atv-sheet rounded-3xl p-5 pr-6 flex items-center gap-5 atv-rise">
               <div className="text-right">
-                <span className="text-xs font-bold text-[#2FD3BF] block mb-1">الحلقة التالية</span>
-                <span className="text-base font-black text-white block">
-                  تبدأ تلقائياً خلال {nextCountdown} ثواني…
-                </span>
+                <span className="text-xs font-bold text-white/55 block mb-1">الحلقة التالية</span>
+                <span className="text-lg font-bold text-white block">تبدأ خلال {nextCountdown} ثوانٍ</span>
               </div>
               <button
                 tabIndex={0}
@@ -1467,14 +1521,14 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
                   lastPositionRef.current = 0;
                   onNext();
                 }}
-                className="tv-focusable bg-[#2FD3BF] text-[#0E1A24] font-black text-base px-6 py-3 rounded-xl shadow-lg hover:scale-105 focus:ring-4 focus:ring-white transition"
+                className="atv-btn-primary h-12 px-6 rounded-xl text-base font-bold"
               >
-                تشغيل الآن ▶
+                ▶ تشغيل الآن
               </button>
               <button
                 tabIndex={0}
                 onClick={() => setNextCountdown(null)}
-                className="text-xs text-[#A7ADBF] hover:text-white px-2 py-1"
+                className="atv-btn-glass h-12 px-5 rounded-xl text-base font-bold"
               >
                 إلغاء
               </button>
@@ -1485,12 +1539,12 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
           {showChannelDrawer && liveChannels.length > 0 && onSelectChannel && (
             <div
               data-tv-modal-root
-              className="absolute top-0 right-0 bottom-0 w-88 bg-[#0A101D]/95 backdrop-blur-md z-40 p-6 flex flex-col border-l border-white/10 animate-in slide-in-from-right duration-200"
+              className="absolute top-0 right-0 bottom-0 w-88 bg-[#0B0B0D]/95 backdrop-blur-md z-40 p-6 flex flex-col border-l border-white/10 animate-in slide-in-from-right duration-200"
             >
               <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-3">
                 <div>
-                  <h3 className="text-lg font-black text-[#38BDF8]">القنوات المباشرة</h3>
-                  <p className="text-[11px] text-[#94A3B8]">دليل البرامج التلفزيوني (EPG)</p>
+                  <h3 className="text-lg font-black text-[#FFFFFF]">القنوات المباشرة</h3>
+                  <p className="text-[11px] text-[#A1A1A6]">دليل البرامج التلفزيوني (EPG)</p>
                 </div>
                 <span className="text-xs bg-red-600 text-white font-bold px-2 py-0.5 rounded">LIVE</span>
               </div>
@@ -1506,7 +1560,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
                     }}
                     className={`tv-focusable w-full text-right p-3 rounded-2xl flex flex-col gap-1 transition ${
                       ch.stream_url === item.url
-                        ? 'bg-[#38BDF8] text-[#0A101D] font-black shadow-lg shadow-[#38BDF8]/30'
+                        ? 'bg-[#FFFFFF] text-[#0B0B0D] font-black shadow-lg shadow-[#FFFFFF]/30'
                         : 'bg-white/5 hover:bg-white/10 text-white border border-white/5'
                     }`}
                   >
@@ -1534,16 +1588,16 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
           {showEpisodesDrawer && playlist && playlist.length > 1 && (
             <div
               data-tv-modal-root
-              className="absolute top-0 right-0 bottom-0 w-96 bg-[#0A101D]/95 backdrop-blur-md z-40 p-6 flex flex-col border-l border-white/10 animate-in slide-in-from-right duration-200 text-white select-none"
+              className="absolute top-0 right-0 bottom-0 w-96 bg-[#0B0B0D]/95 backdrop-blur-md z-40 p-6 flex flex-col border-l border-white/10 animate-in slide-in-from-right duration-200 text-white select-none"
             >
               <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-3">
                 <div>
-                  <h3 className="text-lg font-black text-[#38BDF8] flex items-center gap-2">
+                  <h3 className="text-lg font-black text-[#FFFFFF] flex items-center gap-2">
                     <span>📑</span> قائمة الحلقات
                   </h3>
-                  <p className="text-xs text-[#94A3B8] mt-0.5">اختر أي حلقة للانتقال إليها فوراً</p>
+                  <p className="text-xs text-[#A1A1A6] mt-0.5">اختر أي حلقة للانتقال إليها فوراً</p>
                 </div>
-                <span className="text-xs bg-[#1E293B] text-[#38BDF8] px-2.5 py-1 rounded-full font-bold border border-[#38BDF8]/20">
+                <span className="text-xs bg-[#1C1C1E] text-[#FFFFFF] px-2.5 py-1 rounded-full font-bold border border-[#FFFFFF]/20">
                   {playlist.length} حلقة
                 </span>
               </div>
@@ -1564,13 +1618,13 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
                       }}
                       className={`tv-focusable w-full text-right p-3 rounded-2xl flex items-center gap-3 transition ${
                         isCurrent
-                          ? 'bg-[#38BDF8] text-[#0A101D] font-black shadow-lg shadow-[#38BDF8]/30 scale-[1.02]'
+                          ? 'bg-[#FFFFFF] text-[#0B0B0D] font-black shadow-lg shadow-[#FFFFFF]/30 scale-[1.02]'
                           : 'bg-white/5 hover:bg-white/10 text-white border border-white/5'
                       }`}
                     >
                       <span
                         className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm flex-shrink-0 ${
-                          isCurrent ? 'bg-[#0A101D] text-[#38BDF8]' : 'bg-white/10 text-[#94A3B8]'
+                          isCurrent ? 'bg-[#0B0B0D] text-[#FFFFFF]' : 'bg-white/10 text-[#A1A1A6]'
                         }`}
                       >
                         {idx + 1}
@@ -1595,10 +1649,10 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
           {showSettingsDrawer && (
             <div
               data-tv-modal-root
-              className="absolute top-0 left-0 bottom-0 w-88 bg-[#0A101D]/95 backdrop-blur-md z-40 p-6 flex flex-col border-r border-white/10 animate-in slide-in-from-left duration-200 text-white overflow-y-auto"
+              className="absolute top-0 left-0 bottom-0 w-88 bg-[#0B0B0D]/95 backdrop-blur-md z-40 p-6 flex flex-col border-r border-white/10 animate-in slide-in-from-left duration-200 text-white overflow-y-auto"
             >
               <div className="flex items-center justify-between mb-5 border-b border-white/10 pb-3">
-                <h3 className="text-lg font-black text-[#38BDF8] flex items-center gap-2">
+                <h3 className="text-lg font-black text-[#FFFFFF] flex items-center gap-2">
                   <span>⚙️</span> خيارات البث والترجمة
                 </h3>
                 <button
@@ -1611,7 +1665,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
 
               {/* قسم سرعة التشغيل */}
               <div className="mb-6">
-                <h4 className="text-xs font-black text-[#94A3B8] mb-2.5">سرعة التشغيل (Playback Speed):</h4>
+                <h4 className="text-xs font-black text-[#A1A1A6] mb-2.5">سرعة التشغيل (Playback Speed):</h4>
                 <div className="grid grid-cols-4 gap-2">
                   {[0.75, 1.0, 1.25, 1.5].map((spd) => (
                     <button
@@ -1620,7 +1674,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
                       onClick={() => handleSpeedChange(spd)}
                       className={`tv-focusable py-2 rounded-xl text-xs font-bold transition ${
                         playbackSpeed === spd
-                          ? 'bg-[#38BDF8] text-[#0A101D] font-black'
+                          ? 'bg-[#FFFFFF] text-[#0B0B0D] font-black'
                           : 'bg-white/5 hover:bg-white/10 text-white'
                       }`}
                     >
@@ -1632,14 +1686,14 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
 
               {/* قسم مسار الصوت (Audio Track) */}
               <div className="mb-6">
-                <h4 className="text-xs font-black text-[#94A3B8] mb-2.5">مسار الصوت (Audio Language):</h4>
+                <h4 className="text-xs font-black text-[#A1A1A6] mb-2.5">مسار الصوت (Audio Language):</h4>
                 <div className="space-y-1.5">
                   <button
                     tabIndex={0}
                     onClick={() => handleSelectAudio(-1)}
                     className={`tv-focusable w-full text-right p-2.5 rounded-xl text-xs font-bold transition ${
                       selectedAudioTrack === -1
-                        ? 'bg-[#38BDF8] text-[#0A101D]'
+                        ? 'bg-[#FFFFFF] text-[#0B0B0D]'
                         : 'bg-white/5 hover:bg-white/10 text-white'
                     }`}
                   >
@@ -1652,7 +1706,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
                       onClick={() => handleSelectAudio(tr.id)}
                       className={`tv-focusable w-full text-right p-2.5 rounded-xl text-xs font-bold transition ${
                         selectedAudioTrack === tr.id
-                          ? 'bg-[#38BDF8] text-[#0A101D]'
+                          ? 'bg-[#FFFFFF] text-[#0B0B0D]'
                           : 'bg-white/5 hover:bg-white/10 text-white'
                       }`}
                     >
@@ -1664,14 +1718,14 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
 
               {/* قسم الترجمة (Subtitles) */}
               <div className="mb-6">
-                <h4 className="text-xs font-black text-[#94A3B8] mb-2.5">الترجمة (Subtitles):</h4>
+                <h4 className="text-xs font-black text-[#A1A1A6] mb-2.5">الترجمة (Subtitles):</h4>
                 <div className="space-y-1.5">
                   <button
                     tabIndex={0}
                     onClick={() => handleSelectSubtitle(-1)}
                     className={`tv-focusable w-full text-right p-2.5 rounded-xl text-xs font-bold transition ${
                       selectedSubtitleTrack === -1
-                        ? 'bg-[#38BDF8] text-[#0A101D]'
+                        ? 'bg-[#FFFFFF] text-[#0B0B0D]'
                         : 'bg-white/5 hover:bg-white/10 text-white'
                     }`}
                   >
@@ -1684,7 +1738,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
                       onClick={() => handleSelectSubtitle(sub.id)}
                       className={`tv-focusable w-full text-right p-2.5 rounded-xl text-xs font-bold transition ${
                         selectedSubtitleTrack === sub.id
-                          ? 'bg-[#38BDF8] text-[#0A101D]'
+                          ? 'bg-[#FFFFFF] text-[#0B0B0D]'
                           : 'bg-white/5 hover:bg-white/10 text-white'
                       }`}
                     >
@@ -1697,14 +1751,14 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
               {/* قسم الجودة (Quality) */}
               {qualityLevels.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-black text-[#94A3B8] mb-2.5">جودة الفيديو (Quality):</h4>
+                  <h4 className="text-xs font-black text-[#A1A1A6] mb-2.5">جودة الفيديو (Quality):</h4>
                   <div className="space-y-1.5">
                     <button
                       tabIndex={0}
                       onClick={() => handleSelectQuality(-1)}
                       className={`tv-focusable w-full text-right p-2.5 rounded-xl text-xs font-bold transition ${
                         selectedQuality === -1
-                          ? 'bg-[#38BDF8] text-[#0A101D]'
+                          ? 'bg-[#FFFFFF] text-[#0B0B0D]'
                           : 'bg-white/5 hover:bg-white/10 text-white'
                       }`}
                     >
@@ -1717,7 +1771,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
                         onClick={() => handleSelectQuality(lvl.id)}
                         className={`tv-focusable w-full text-right p-2.5 rounded-xl text-xs font-bold transition ${
                           selectedQuality === lvl.id
-                            ? 'bg-[#38BDF8] text-[#0A101D]'
+                            ? 'bg-[#FFFFFF] text-[#0B0B0D]'
                             : 'bg-white/5 hover:bg-white/10 text-white'
                         }`}
                       >
@@ -1730,14 +1784,14 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
 
               {/* قسم هندسة الصوت وتعزيز الكلام وضغط الصوت الليلي */}
               <div className="mt-6 pt-5 border-t border-white/10">
-                <h4 className="text-base font-black text-[#38BDF8] mb-3">هندسة الصوت الذكية:</h4>
+                <h4 className="text-base font-black text-[#FFFFFF] mb-3">هندسة الصوت الذكية:</h4>
                 <div className="space-y-2.5">
                   <button
                     tabIndex={0}
                     onClick={toggleSpeechEnhance}
                     className={`tv-focusable w-full text-right p-3.5 rounded-2xl text-base font-black transition flex items-center justify-between border ${
                       speechEnhanceMode
-                        ? 'bg-[#38BDF8]/20 text-[#38BDF8] border-[#38BDF8]/40'
+                        ? 'bg-[#FFFFFF]/20 text-[#FFFFFF] border-[#FFFFFF]/40'
                         : 'bg-white/5 hover:bg-white/10 text-white border-white/5'
                     }`}
                   >
@@ -1776,14 +1830,14 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
                       <span className="text-xl">📻</span>
                       <span>وضع الاستماع وإطفاء الشاشة (قصص النوم)</span>
                     </span>
-                    <span className="text-xs text-[#38BDF8]">تشغيل ◀</span>
+                    <span className="text-xs text-[#FFFFFF]">تشغيل ◀</span>
                   </button>
                 </div>
               </div>
 
               {/* قسم الصحة البصرية والتعلم اللغوي */}
               <div className="mt-6 pt-5 border-t border-white/10 pb-6">
-                <h4 className="text-base font-black text-[#94A3B8] mb-3">حماية العين والتعلم الذكي:</h4>
+                <h4 className="text-base font-black text-[#A1A1A6] mb-3">حماية العين والتعلم الذكي:</h4>
                 <div className="space-y-2.5">
                   <button
                     tabIndex={0}
@@ -1809,7 +1863,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
                     }}
                     className={`tv-focusable w-full text-right p-3.5 rounded-2xl text-base font-black transition flex items-center justify-between border ${
                       bilingualMode
-                        ? 'bg-[#38BDF8]/20 text-[#38BDF8] border-[#38BDF8]/30'
+                        ? 'bg-[#FFFFFF]/20 text-[#FFFFFF] border-[#FFFFFF]/30'
                         : 'bg-white/5 hover:bg-white/10 text-white border-white/5'
                     }`}
                   >
@@ -1825,258 +1879,166 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
 
           {/* إشعار إضافة/إزالة المفضلة */}
           {favToast && (
-            <div className="absolute top-24 left-1/2 -translate-x-1/2 z-50 bg-[#2FD3BF] text-[#0A101D] px-8 py-3.5 rounded-2xl font-black text-xl shadow-2xl flex items-center gap-3 animate-bounce">
-              <span>{favToast}</span>
-            </div>
+            <AtvToast tone="ok" top={40}>{favToast}</AtvToast>
           )}
 
-          {/* الشريط العلوي عند إظهار شريط التحكم: العنوان ومعلومات المشاهدة + أزرار الإعدادات والمفضلة وقفل الأطفال */}
+          {/* ═══ واجهة التحكم بنمط Apple TV ═══ */}
+          {/* أعلى: رجوع + الوقت المتبقي للطفل */}
           <div
             ref={topBarRef}
-            className={`absolute inset-x-0 top-0 p-8 bg-gradient-to-b from-black/95 via-black/70 to-transparent transition-opacity duration-300 z-30 flex items-center justify-between select-none ${
-              showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            className={`absolute inset-x-0 top-0 px-12 pt-10 pb-24 bg-gradient-to-b from-black/60 to-transparent transition-opacity duration-500 z-30 flex items-start justify-between select-none ${
+              showControls && !(isBuffering && currentTime < 1 && !errorMessage) ? 'opacity-100' : 'opacity-0 pointer-events-none'
             }`}
             onClick={(e) => e.stopPropagation()}
             dir="rtl"
             style={{ direction: 'rtl' }}
           >
-            {/* الجانب الأيمن: زر الرجوع + عنوان المحتوى والشارة */}
-            <div className="flex items-center gap-4">
-              <button
-                tabIndex={0}
-                onClick={handleSafeClose}
-                className="tv-focusable bg-white/10 hover:bg-white/20 text-white font-bold text-sm px-4 py-2.5 rounded-xl border border-white/10 transition flex items-center gap-2"
-                title="الرجوع (الريموت)"
-              >
-                <span>←</span>
-                <span>الرجوع</span>
+            <div className="flex items-center gap-3">
+              <button tabIndex={0} onClick={handleSafeClose} className="atv-icon-btn atv-osd-glass w-12 h-12" title="رجوع">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 6l6 6-6 6" />
+                </svg>
               </button>
-
-              <div className="flex items-center gap-3">
-                <h2 className="text-2xl font-black text-white drop-shadow truncate max-w-lg">
-                  {item.title}
-                </h2>
-                {isLive && (
-                  <span className="bg-red-600 text-white text-xs font-bold px-2.5 py-0.5 rounded-md flex items-center gap-1.5 animate-pulse">
-                    <span className="w-2 h-2 rounded-full bg-white" />
-                    مباشر
-                  </span>
-                )}
-              </div>
-
               {remainingMinutes != null && (
-                <div className="bg-white/10 backdrop-blur-sm px-3.5 py-1.5 rounded-xl text-xs font-bold text-[#CBD5E1] flex items-center gap-2 border border-white/10 mr-2">
-                  <span className="text-base">⏳</span>
-                  <span>متبقي: {remainingMinutes} د</span>
-                </div>
+                <span className="atv-osd-glass h-9 px-4 rounded-full text-sm font-bold text-white/85 flex items-center gap-1.5">
+                  وقت المشاهدة المتبقي: {remainingMinutes} د
+                </span>
               )}
             </div>
-
-            {/* الجانب الأيسر: أزرار المفضلة، قصص النوم، الترجمة والصوت، دليل القنوات، وقفل الأطفال في الأعلى */}
-            <div className="flex items-center gap-3" dir="rtl" style={{ direction: 'rtl' }}>
-              {/* شاشة الفحص الفني HUD */}
-              <button
-                tabIndex={0}
-                onClick={() => setShowDiagnosticsHud(!showDiagnosticsHud)}
-                className={`tv-focusable px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 border transition ${
-                  showDiagnosticsHud
-                    ? 'bg-blue-500/20 text-[#38BDF8] border-[#38BDF8]/40'
-                    : 'bg-white/10 text-white border-white/10 hover:bg-white/20'
-                }`}
-                title="فحص جودة وأداء البث (الزر الأزرق بالريموت 🔵)"
-              >
-                <span className="text-base">📊</span>
-                <span>الفحص (HUD)</span>
-              </button>
-
-              {/* وضع تصغير الشاشة PiP */}
-              <button
-                tabIndex={0}
-                onClick={() => setIsPipMode(!isPipMode)}
-                className="tv-focusable bg-white/10 hover:bg-white/20 px-3.5 py-2.5 rounded-xl text-xs font-bold text-white flex items-center gap-2 border border-white/10 transition"
-                title="تصغير الفيديو كنافذة عائمة (الزر الأصفر بالريموت 🟡)"
-              >
-                <span className="text-base">🗔</span>
-                <span>تصغير (PiP)</span>
-              </button>
-
-              {/* زر المفضلة */}
-              <button
-                tabIndex={0}
-                onClick={toggleFavorite}
-                className={`tv-focusable px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 border transition ${
-                  isFavorite
-                    ? 'bg-red-500/20 text-red-400 border-red-500/40'
-                    : 'bg-white/10 text-white border-white/10 hover:bg-white/20'
-                }`}
-                title="المفضلة (الزر الأخضر بالريموت)"
-              >
-                <span className="text-base">{isFavorite ? '❤️' : '🤍'}</span>
-                <span>{isFavorite ? 'في المفضلة' : 'أضف للمفضلة'}</span>
-              </button>
-
-              {/* وضع الاستماع لقصص النوم */}
-              <button
-                tabIndex={0}
-                onClick={toggleScreenOffMode}
-                className="tv-focusable bg-white/10 hover:bg-white/20 px-4 py-2.5 rounded-xl text-xs font-bold text-white flex items-center gap-2 border border-white/10 transition"
-                title="وضع الاستماع وإطفاء الشاشة"
-              >
-                <span className="text-base">📻</span>
-                <span>قصص النوم (إطفاء الشاشة)</span>
-              </button>
-
-              {/* الترجمة والصوت */}
-              <button
-                tabIndex={0}
-                onClick={() => setShowSettingsDrawer(!showSettingsDrawer)}
-                className="tv-focusable bg-white/10 hover:bg-white/20 px-4 py-2.5 rounded-xl text-xs font-bold text-white flex items-center gap-2 border border-white/10 transition"
-              >
-                <span className="text-base">⚙️</span>
-                <span>الترجمة والصوت</span>
-              </button>
-
-              {/* قائمة حلقات المسلسل (إذا وجدت حلقات في المسلسل) */}
-              {playlist && playlist.length > 1 && (
-                <button
-                  tabIndex={0}
-                  onClick={() => setShowEpisodesDrawer(!showEpisodesDrawer)}
-                  className="tv-focusable bg-white/10 hover:bg-white/20 px-4 py-2.5 rounded-xl text-xs font-bold text-white flex items-center gap-2 border border-white/10 transition"
-                  title="قائمة الحلقات"
-                >
-                  <span className="text-base">📑</span>
-                  <span>الحلقات ({playlist.length})</span>
-                </button>
-              )}
-
-              {/* دليل القنوات للبث المباشر */}
-              {isLive && liveChannels.length > 0 && (
-                <button
-                  onClick={() => setShowChannelDrawer(!showChannelDrawer)}
-                  tabIndex={0}
-                  className="tv-focusable bg-white/10 hover:bg-white/20 px-4 py-2.5 rounded-xl text-xs font-bold text-white flex items-center gap-2 border border-white/10 transition"
-                >
-                  <span className="text-base">📡</span>
-                  <span>دليل القنوات</span>
-                </button>
-              )}
-
-              {/* قفل الأطفال */}
-              <button
-                tabIndex={0}
-                onClick={() => {
-                  setIsLocked(true);
-                  setShowControls(false);
-                }}
-                className="tv-focusable bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 border border-amber-500/30 transition"
-                title="قفل الأطفال"
-              >
-                <span className="text-base">🔒</span>
-                <span>قفل الأطفال</span>
-              </button>
-            </div>
+            {isLive && (
+              <span className="bg-[#FF453A] text-white text-sm font-bold h-8 px-3.5 rounded-md flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-white animate-pulse" /> مباشر
+              </span>
+            )}
           </div>
 
-          {/* شريط التحكم السفلي (OSD) المتناسق: شريط التقدم + أزرار التشغيل المركزية فقط */}
+          {/* أسفل: العنوان + الأزرار + شريط التقدم + أزرار التشغيل */}
           <div
             ref={bottomBarRef}
-            dir="ltr"
-            className={`absolute inset-x-0 bottom-0 p-8 pb-10 bg-gradient-to-t from-black/95 via-black/70 to-transparent transition-opacity duration-300 z-20 ${
-              showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            dir="rtl"
+            className={`absolute inset-x-0 bottom-0 px-16 pt-40 pb-12 bg-gradient-to-t from-black/90 via-black/55 to-transparent transition-opacity duration-500 z-20 select-none ${
+              showControls && !(isBuffering && currentTime < 1 && !errorMessage) ? 'opacity-100' : 'opacity-0 pointer-events-none'
             }`}
             onClick={(e) => e.stopPropagation()}
-            style={{ direction: 'ltr' }}
+            style={{ direction: 'rtl' }}
           >
-            {/* 0. شريط التايم شفت للبث المباشر (TimeShift & Catch-up) */}
-            {isLive && (
-              <div
-                dir="rtl"
-                className="flex items-center justify-center gap-3 w-full mb-6 select-none"
-                style={{ direction: 'rtl' }}
-              >
-                <span className="text-xs font-bold text-[#94A3B8] ml-2">خاصية التايم شفت (TimeShift):</span>
-                <button
-                  tabIndex={0}
-                  onClick={() => timeshiftRewind(900)}
-                  className="tv-focusable bg-white/10 hover:bg-[#38BDF8] hover:text-[#0A101D] text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-white/10 transition"
-                  title="إرجاع البث 15 دقيقة"
-                >
-                  ↺ 15- د
+            {/* صف العنوان والأيقونات */}
+            <div className="flex items-end justify-between gap-8 mb-6">
+              <div className="min-w-0">
+                <div className="text-[15px] font-bold text-white/60 mb-1.5">
+                  {isLive
+                    ? 'بث مباشر'
+                    : playlist && playlist.length > 1
+                    ? `الحلقة ${Math.max(1, playlist.findIndex((p) => p.id === item.id) + 1)} من ${playlist.length}`
+                    : 'فيلم'}
+                </div>
+                <h2 dir="auto" className="text-[34px] leading-tight font-extrabold text-white truncate max-w-[60vw] atv-text-shadow">
+                  {item.title}
+                </h2>
+              </div>
+
+              <div className="flex items-center gap-2.5 flex-shrink-0">
+                {playlist && playlist.length > 1 && (
+                  <button tabIndex={0} onClick={() => setShowEpisodesDrawer(!showEpisodesDrawer)} className="atv-osd-pill" title="الحلقات">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h10" /></svg>
+                    <span>الحلقات</span>
+                  </button>
+                )}
+                {isLive && liveChannels.length > 0 && (
+                  <button tabIndex={0} onClick={() => setShowChannelDrawer(!showChannelDrawer)} className="atv-osd-pill" title="القنوات">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M8 2l4 4 4-4" /></svg>
+                    <span>القنوات</span>
+                  </button>
+                )}
+                <button tabIndex={0} onClick={() => setShowSettingsDrawer(!showSettingsDrawer)} className="atv-osd-pill" title="الصوت والترجمة">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /><path d="M7 9h4M13 9h4M7 13h6" /></svg>
+                  <span>الصوت والترجمة</span>
+                </button>
+                <button tabIndex={0} onClick={toggleFavorite} className="atv-icon-btn atv-osd-glass w-12 h-12" title={isFavorite ? 'في المفضلة' : 'أضف للمفضلة'}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill={isFavorite ? '#FF453A' : 'none'} stroke={isFavorite ? '#FF453A' : 'currentColor'} strokeWidth="2.2" strokeLinejoin="round"><path d="M12 21s-7.5-4.6-9.5-9.2C1.2 8.6 3.3 5 6.8 5c2 0 3.5 1.1 5.2 3 1.7-1.9 3.2-3 5.2-3 3.5 0 5.6 3.6 4.3 6.8C19.5 16.4 12 21 12 21z" /></svg>
+                </button>
+                <button tabIndex={0} onClick={toggleScreenOffMode} className="atv-icon-btn atv-osd-glass w-12 h-12" title="وضع الاستماع (قصص النوم)">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z" /></svg>
+                </button>
+                <button tabIndex={0} onClick={() => setIsPipMode(!isPipMode)} className="atv-icon-btn atv-osd-glass w-12 h-12" title="نافذة عائمة">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" /><rect x="12" y="12" width="7" height="5" rx="1" fill="currentColor" /></svg>
                 </button>
                 <button
                   tabIndex={0}
-                  onClick={() => timeshiftRewind(1800)}
-                  className="tv-focusable bg-white/10 hover:bg-[#38BDF8] hover:text-[#0A101D] text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-white/10 transition"
-                  title="إرجاع البث 30 دقيقة"
+                  onClick={() => setShowDiagnosticsHud(!showDiagnosticsHud)}
+                  className={`atv-icon-btn atv-osd-glass w-12 h-12 ${showDiagnosticsHud ? 'atv-osd-on' : ''}`}
+                  title="فحص البث"
                 >
-                  ↺ 30- د
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M5 20V10M12 20V4M19 20v-7" /></svg>
                 </button>
                 <button
                   tabIndex={0}
-                  onClick={() => timeshiftRewind(3600)}
-                  className="tv-focusable bg-white/10 hover:bg-[#38BDF8] hover:text-[#0A101D] text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-white/10 transition"
-                  title="إرجاع البث ساعة كاملة"
+                  onClick={() => {
+                    setIsLocked(true);
+                    setShowControls(false);
+                  }}
+                  className="atv-icon-btn atv-osd-glass w-12 h-12"
+                  title="قفل الأطفال"
                 >
-                  ↺ 1- س
-                </button>
-                <button
-                  tabIndex={0}
-                  onClick={returnToLiveEdge}
-                  className="tv-focusable bg-red-600 hover:bg-red-500 text-white text-xs font-black px-4 py-1.5 rounded-xl shadow-lg transition flex items-center gap-1.5 animate-pulse mr-2"
-                  title="العودة للحظة البث المباشر الآن"
-                >
-                  <span className="w-2 h-2 rounded-full bg-white" />
-                  🔴 العودة للمباشر
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 018 0v4" /></svg>
                 </button>
               </div>
-            )}
+            </div>
 
-            {/* 1. شريط التقدم للفيديوهات المسجلة: ثابت LTR بنسبة 100% وبدون أي انعكاس */}
+            {/* شريط التقدم (LTR دائماً) */}
             {!isLive && (
-              <div
-                dir="ltr"
-                className="flex items-center gap-4 w-full mb-6"
-                style={{ direction: 'ltr', display: 'flex', flexDirection: 'row', alignItems: 'center' }}
-              >
-                <span className="text-base font-mono text-[#CBD5E1] font-bold min-w-[65px] text-left" dir="ltr" style={{ direction: 'ltr' }}>
-                  {formatTime(currentTime)}
-                </span>
+              <div dir="ltr" style={{ direction: 'ltr' }} className="mb-7">
                 <div
-                  className="flex-1 h-3 bg-white/20 hover:h-4 rounded-full overflow-hidden cursor-pointer relative transition-all"
-                  dir="ltr"
-                  style={{ direction: 'ltr' }}
+                  className="atv-scrubber relative h-[7px] rounded-full cursor-pointer"
                   onClick={(e) => {
                     const rect = e.currentTarget.getBoundingClientRect();
                     const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-                    if (videoRef.current && duration > 0) {
-                      videoRef.current.currentTime = pos * duration;
-                    }
+                    if (videoRef.current && duration > 0) videoRef.current.currentTime = pos * duration;
                   }}
                 >
                   <div
-                    className="h-full bg-[#38BDF8] rounded-full transition-all duration-100 shadow-md shadow-[#38BDF8]/50"
-                    style={{
-                      position: 'absolute',
-                      left: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`,
-                    }}
+                    className="absolute left-0 top-0 bottom-0 bg-white rounded-full"
+                    style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+                  />
+                  <div
+                    className="absolute top-1/2 w-[3px] h-5 -translate-y-1/2 bg-white rounded-full shadow"
+                    style={{ left: `calc(${duration > 0 ? (currentTime / duration) * 100 : 0}% - 1px)` }}
                   />
                 </div>
-                <span className="text-base font-mono text-[#CBD5E1] font-bold min-w-[65px] text-right" dir="ltr" style={{ direction: 'ltr' }}>
-                  {formatTime(duration)}
-                </span>
+                <div className="flex justify-between mt-2.5 text-[15px] font-semibold text-white/75 tabular-nums">
+                  <span dir="ltr">{formatTime(currentTime)}</span>
+                  <span dir="ltr">-{formatTime(Math.max(0, duration - currentTime))}</span>
+                </div>
               </div>
             )}
 
-            {/* 2. أزرار التشغيل المركزية مرتبة هندسياً ونظيفة في المنتصف بدون تشويش */}
-            <div
-              dir="ltr"
-              className="flex items-center justify-center gap-8 select-none"
-              style={{ direction: 'ltr', display: 'flex', flexDirection: 'row', alignItems: 'center' }}
-            >
-              {/* 1. المقطع السابق (على اليسار) */}
+            {/* التايم شفت للبث المباشر */}
+            {isLive && (
+              <div className="flex items-center justify-center gap-3 mb-7">
+                {[
+                  [900, '15 د'],
+                  [1800, '30 د'],
+                  [3600, 'ساعة'],
+                ].map(([sec, label]) => (
+                  <button
+                    key={sec as number}
+                    tabIndex={0}
+                    onClick={() => timeshiftRewind(sec as number)}
+                    className="atv-osd-pill"
+                    title={`إرجاع ${label}`}
+                  >
+                    <span>↺ رجوع {label}</span>
+                  </button>
+                ))}
+                <button tabIndex={0} onClick={returnToLiveEdge} className="atv-osd-pill atv-osd-live" title="العودة للمباشر">
+                  <span className="w-2 h-2 rounded-full bg-white" />
+                  <span>العودة للمباشر</span>
+                </button>
+              </div>
+            )}
+
+            {/* أزرار التشغيل */}
+            <div dir="ltr" style={{ direction: 'ltr' }} className="flex items-center justify-center gap-5">
               {onPrevious && !isLive && (
                 <button
                   onClick={() => {
@@ -2084,65 +2046,35 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
                     onPrevious();
                   }}
                   tabIndex={0}
-                  title="المقطع السابق (السابق)"
-                  className="tv-focusable p-3.5 rounded-full hover:bg-white/20 text-white focus:bg-[#38BDF8] focus:text-[#0A101D] transition"
+                  title="الحلقة السابقة"
+                  className="atv-icon-btn atv-osd-glass w-14 h-14"
                 >
-                  <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
-                  </svg>
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>
                 </button>
               )}
-
-              {/* 2. إرجاع 10 ثوانٍ (يسار زر التشغيل) */}
               {!isLive && (
-                <button
-                  onClick={() => seek(-10)}
-                  tabIndex={0}
-                  title="إرجاع 10 ثوانٍ"
-                  className="tv-focusable p-3 rounded-2xl hover:bg-white/20 text-white focus:bg-[#38BDF8] focus:text-[#0A101D] transition flex items-center gap-2 px-5 bg-white/5 border border-white/10"
-                  dir="ltr"
-                  style={{ direction: 'ltr' }}
-                >
-                  <span className="text-2xl font-black leading-none">↺</span>
-                  <span className="text-base font-bold font-mono" dir="ltr" style={{ direction: 'ltr', unicodeBidi: 'bidi-override' }}>-10s</span>
+                <button onClick={() => seek(-10)} tabIndex={0} title="إرجاع 10 ثوانٍ" className="atv-icon-btn atv-osd-glass w-14 h-14">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 109-9 9.7 9.7 0 00-6.7 2.8L3 8" /><path d="M3 3v5h5" /><text x="12" y="15.5" fontSize="7.5" fontWeight="700" textAnchor="middle" fill="currentColor" stroke="none">10</text></svg>
                 </button>
               )}
-
-              {/* 3. زر التشغيل والإيقاف الكبير في المنتصف */}
               <button
                 ref={playPauseRef}
                 onClick={togglePlay}
                 tabIndex={0}
-                title={isPlaying ? "إيقاف مؤقت" : "تشغيل"}
-                className="tv-focusable bg-[#38BDF8] text-[#0A101D] p-5 rounded-full shadow-2xl hover:scale-105 focus:ring-4 focus:ring-white transition shadow-[#38BDF8]/40 mx-2"
+                title={isPlaying ? 'إيقاف مؤقت' : 'تشغيل'}
+                className="atv-icon-btn atv-osd-glass w-[76px] h-[76px]"
               >
                 {isPlaying ? (
-                  <svg className="w-9 h-9" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                  </svg>
+                  <svg className="w-9 h-9" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
                 ) : (
-                  <svg className="w-9 h-9" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
+                  <svg className="w-9 h-9 translate-x-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
                 )}
               </button>
-
-              {/* 4. تقديم 10 ثوانٍ (يمين زر التشغيل) */}
               {!isLive && (
-                <button
-                  onClick={() => seek(10)}
-                  tabIndex={0}
-                  title="تقديم 10 ثوانٍ"
-                  className="tv-focusable p-3 rounded-2xl hover:bg-white/20 text-white focus:bg-[#38BDF8] focus:text-[#0A101D] transition flex items-center gap-2 px-5 bg-white/5 border border-white/10"
-                  dir="ltr"
-                  style={{ direction: 'ltr' }}
-                >
-                  <span className="text-base font-bold font-mono" dir="ltr" style={{ direction: 'ltr', unicodeBidi: 'bidi-override' }}>+10s</span>
-                  <span className="text-2xl font-black leading-none">↻</span>
+                <button onClick={() => seek(10)} tabIndex={0} title="تقديم 10 ثوانٍ" className="atv-icon-btn atv-osd-glass w-14 h-14">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 11-9-9 9.7 9.7 0 016.7 2.8L21 8" /><path d="M21 3v5h-5" /><text x="12" y="15.5" fontSize="7.5" fontWeight="700" textAnchor="middle" fill="currentColor" stroke="none">10</text></svg>
                 </button>
               )}
-
-              {/* 5. المقطع التالي (على اليمين) */}
               {onNext && !isLive && (
                 <button
                   onClick={() => {
@@ -2150,12 +2082,10 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
                     onNext();
                   }}
                   tabIndex={0}
-                  title="المقطع التالي (التالي)"
-                  className="tv-focusable p-3.5 rounded-full hover:bg-white/20 text-white focus:bg-[#38BDF8] focus:text-[#0A101D] transition"
+                  title="الحلقة التالية"
+                  className="atv-icon-btn atv-osd-glass w-14 h-14"
                 >
-                  <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M5 4l10 8-10 8V4zm14 0h2v16h-2V4z" />
-                  </svg>
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M5 4l10 8-10 8V4zm14 0h2v16h-2V4z" /></svg>
                 </button>
               )}
             </div>

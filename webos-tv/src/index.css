@@ -18,7 +18,7 @@ html, body {
   user-select: none;
   -webkit-user-select: none;
   font-family: 'Tajawal', system-ui, -apple-system, sans-serif;
-  background-color: #0A101D;
+  background-color: #0B0B0D;
 }
 
 /* Hide scrollbars for clean IPTV UI */
@@ -51,4 +51,186 @@ html, body {
   z-index: 30;
   border-color: #38BDF8 !important;
   box-shadow: 0 8px 30px rgba(56, 189, 248, 0.4);
+}
+
+/* ═════════════ Apple TV look ═════════════ */
+html, body { background-color: #0B0B0D; }
+
+.atv-bg {
+  background: radial-gradient(120% 80% at 80% 0%, #1c1c22 0%, #0B0B0D 55%) #0B0B0D;
+}
+
+/* شريط علوي: شفاف فوق الـ Top Shelf، ويصير زجاجياً عند التمرير */
+.atv-header-solid {
+  background: linear-gradient(to bottom, rgba(11,11,13,0.97) 0%, rgba(11,11,13,0.88) 65%, rgba(11,11,13,0) 100%);
+}
+
+.atv-tabbar, .atv-segment {
+  background: rgba(255,255,255,0.10);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  backdrop-filter: blur(24px) saturate(160%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08), 0 8px 30px rgba(0,0,0,0.35);
+}
+.atv-tab {
+  color: rgba(255,255,255,0.72);
+  transition: transform .2s cubic-bezier(.2,.8,.2,1), background-color .2s, color .2s;
+}
+.atv-tab-active { color: #fff; background: rgba(255,255,255,0.16); }
+.atv-tab:focus { background: #fff; color: #0B0B0D; transform: scale(1.08); box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+
+.atv-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 9999px; color: rgba(255,255,255,.85);
+  background: rgba(255,255,255,0.08);
+  transition: transform .2s cubic-bezier(.2,.8,.2,1), background-color .2s, color .2s;
+}
+.atv-icon-btn:focus { background: #fff; color: #0B0B0D; transform: scale(1.12); }
+
+.atv-glass {
+  background: rgba(255,255,255,0.09);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+}
+
+.atv-btn-primary {
+  background: rgba(255,255,255,0.92); color: #0B0B0D;
+  transition: transform .2s cubic-bezier(.2,.8,.2,1), box-shadow .2s, background-color .2s;
+}
+.atv-btn-glass {
+  color: #fff; background: rgba(255,255,255,0.16);
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+  transition: transform .2s cubic-bezier(.2,.8,.2,1), box-shadow .2s, background-color .2s, color .2s;
+}
+.atv-btn-primary:focus, .atv-btn-glass:focus {
+  background: #fff; color: #0B0B0D; transform: scale(1.08);
+  box-shadow: 0 18px 40px rgba(0,0,0,.55);
+}
+.atv-link { color: rgba(255,255,255,.6); padding: 4px 12px; border-radius: 9999px; transition: all .2s; }
+.atv-link:focus { background: #fff; color: #0B0B0D; transform: scale(1.06); }
+
+/* الرفوف */
+.atv-shelf { position: relative; }
+.atv-row {
+  display: flex; gap: 28px; overflow-x: auto; overflow-y: visible;
+  padding: 18px 64px 10px; scroll-padding: 0 64px;
+}
+
+/* البطاقة: رفع + تكبير + ظل عميق + لمعة زجاجية (Parallax-like) */
+.atv-item { cursor: pointer; outline: none; }
+.atv-card {
+  position: relative; overflow: hidden; border-radius: 14px;
+  background: #1C1C1E;
+  box-shadow: 0 6px 16px rgba(0,0,0,.35);
+  transform: translateZ(0);
+  transition: transform .28s cubic-bezier(.2,.8,.2,1), box-shadow .28s cubic-bezier(.2,.8,.2,1);
+}
+.atv-card::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+  background: linear-gradient(115deg, rgba(255,255,255,.28) 0%, rgba(255,255,255,0) 38%);
+  opacity: 0; transition: opacity .28s;
+}
+.atv-item:focus .atv-card {
+  transform: scale(1.1) translateY(-6px);
+  box-shadow: 0 34px 60px rgba(0,0,0,.75), 0 0 0 2px rgba(255,255,255,.22);
+  z-index: 5;
+}
+.atv-item:focus .atv-card::after { opacity: 1; }
+.atv-item:focus { position: relative; z-index: 5; }
+
+.atv-caption {
+  margin-top: 12px; text-align: right;
+  font-size: 15px; font-weight: 700; color: rgba(255,255,255,.62);
+  transition: color .2s, transform .28s cubic-bezier(.2,.8,.2,1);
+}
+.atv-caption .atv-sub { font-weight: 500; color: rgba(255,255,255,.4); margin-top: 2px; }
+.atv-item:focus .atv-caption { color: #fff; transform: translateY(8px); }
+
+.atv-text-shadow { text-shadow: 0 2px 18px rgba(0,0,0,.55); }
+
+@keyframes atvFade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes atvRise { from { opacity: 0; transform: translateY(18px) } to { opacity: 1; transform: none } }
+@keyframes atvKen { from { transform: scale(1.08) } to { transform: scale(1) } }
+.atv-fade-in { animation: atvFade .35s ease both; }
+.atv-rise { animation: atvRise .6s cubic-bezier(.2,.8,.2,1) both; }
+.atv-ken-burns { animation: atvFade .8s ease both, atvKen 9s ease-out both; }
+
+/* البطاقات العامة (القديمة) تتبع نفس روح Apple TV */
+.tv-focusable:focus { transform: scale(1.05); }
+.tv-channel-card:focus {
+  transform: scale(1.08);
+  border-color: transparent !important;
+  box-shadow: 0 24px 50px rgba(0,0,0,.7), 0 0 0 2px rgba(255,255,255,.25);
+}
+
+/* ─── مشغّل الفيديو بنمط Apple TV ─── */
+.atv-osd-glass {
+  background: rgba(255,255,255,0.14);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+  backdrop-filter: blur(28px) saturate(170%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10);
+  color: #fff;
+}
+.atv-osd-on { background: rgba(255,255,255,0.32); }
+.atv-osd-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 48px; padding: 0 20px; border-radius: 9999px;
+  font-size: 15px; font-weight: 700; color: #fff;
+  background: rgba(255,255,255,0.14);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+  backdrop-filter: blur(28px) saturate(170%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10);
+  transition: transform .2s cubic-bezier(.2,.8,.2,1), background-color .2s, color .2s;
+}
+.atv-osd-live { background: #FF453A; }
+.atv-osd-pill:focus, .atv-osd-glass:focus {
+  background: #fff !important; color: #0B0B0D; transform: scale(1.1);
+  box-shadow: 0 14px 34px rgba(0,0,0,.5);
+}
+.atv-scrubber {
+  background: rgba(255,255,255,0.28);
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+}
+
+/* ─── مؤشر الانتظار بنمط Apple TV ─── */
+.atv-spinner { position: relative; display: inline-block; }
+.atv-spinner span {
+  position: absolute; left: 46%; top: 0; width: 8%; height: 28%;
+  border-radius: 9999px; background: #fff; transform-origin: 50% 178%;
+  animation: atvSpin 1.2s linear infinite; opacity: .15;
+}
+@keyframes atvSpin { 0% { opacity: .95 } 100% { opacity: .15 } }
+
+/* ─── لوحة/نافذة زجاجية (Sheet) ─── */
+.atv-sheet {
+  background: rgba(40,40,44,0.78);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  backdrop-filter: blur(40px) saturate(180%);
+  box-shadow: 0 40px 100px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,0.10);
+}
+.atv-btn-danger { color: #FF453A; }
+.atv-btn-danger:focus { background: #FF453A !important; color: #fff !important; }
+
+/* ─── الإشعارات العائمة الموحّدة ─── */
+.atv-toast {
+  position: fixed; left: 50%; z-index: 70;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px;
+  max-width: 70vw; min-height: 52px; padding: 10px 24px 10px 22px;
+  border-radius: 9999px; color: #fff; font-size: 16px; font-weight: 700;
+  background: rgba(40,40,44,0.82);
+  -webkit-backdrop-filter: blur(36px) saturate(180%);
+  backdrop-filter: blur(36px) saturate(180%);
+  box-shadow: 0 20px 50px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,0.10);
+  animation: atvToastIn .45s cubic-bezier(.2,.8,.2,1) both;
+}
+.atv-toast-lg { border-radius: 24px; padding: 14px 18px 14px 26px; }
+.atv-toast-dot { width: 9px; height: 9px; border-radius: 9999px; flex-shrink: 0; background: #fff; }
+.atv-toast-ok .atv-toast-dot { background: #30D158; }
+.atv-toast-warn .atv-toast-dot { background: #FF9F0A; }
+.atv-toast-error .atv-toast-dot { background: #FF453A; }
+.atv-toast-icon { display: inline-flex; align-items: center; flex-shrink: 0; font-size: 20px; }
+@keyframes atvToastIn {
+  from { opacity: 0; transform: translate(-50%, -16px) scale(.96); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
 }

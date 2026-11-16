@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { AtvToast } from './AtvAlert';
 import type { Device, IptvSource } from '../types';
 import {
   verifySettingsPin,
@@ -38,6 +39,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [pingMs, setPingMs] = useState<number | null>(null);
   const [isPinging, setIsPinging] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [activeSection, setActiveSection] = useState<
+    'performance' | 'content' | 'time' | 'storage' | 'parental'
+  >('performance');
+
+  const SECTIONS: { id: typeof activeSection; label: string; icon: string }[] = [
+    { id: 'performance', label: 'الأداء', icon: '⚡' },
+    { id: 'content', label: 'المحتوى والسيرفرات', icon: '📡' },
+    { id: 'time', label: 'وقت المشاهدة والمكافآت', icon: '⏱️' },
+    { id: 'storage', label: 'الذاكرة وسجل المشاهدة', icon: '🧹' },
+    { id: 'parental', label: 'الرقابة الأبوية', icon: '🔒' },
+  ];
 
   // تحدي الأسئلة والمكافآت التعليمية للأطفال
   const QUIZ_LIST = [
@@ -176,18 +188,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return (
       <div
         data-tv-modal-root
-        className="fixed inset-0 z-50 bg-[#0A101D]/90 backdrop-blur-md flex items-center justify-center p-8 select-none"
+        className="fixed inset-0 z-50 bg-[#0B0B0D]/90 backdrop-blur-md flex items-center justify-center p-8 select-none"
         onClick={onClose}
       >
         <div
-          className="w-full max-w-md bg-[#131E32] border border-white/10 rounded-3xl p-8 flex flex-col items-center shadow-2xl"
+          className="w-full max-w-md bg-[#1C1C1E] border border-white/10 rounded-3xl p-8 flex flex-col items-center shadow-2xl"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="w-16 h-16 rounded-2xl bg-[#38BDF8]/20 text-[#38BDF8] flex items-center justify-center text-3xl mb-4 border border-[#38BDF8]/30 shadow-lg shadow-[#38BDF8]/20">
+          <div className="w-16 h-16 rounded-2xl bg-[#FFFFFF]/20 text-[#FFFFFF] flex items-center justify-center text-3xl mb-4 border border-[#FFFFFF]/30 shadow-lg shadow-[#FFFFFF]/20">
             🔒
           </div>
           <h2 className="text-2xl font-black text-white mb-2">إعدادات ولي الأمر</h2>
-          <p className="text-sm text-[#94A3B8] mb-6 text-center">
+          <p className="text-sm text-[#A1A1A6] mb-6 text-center">
             أدخل رمز الحماية المكون من 4 أرقام للدخول إلى الإعدادات
           </p>
 
@@ -199,8 +211,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   pinError
                     ? 'border-red-500 text-red-500 bg-red-500/10'
                     : enteredPin.length > i
-                    ? 'border-[#38BDF8] bg-[#38BDF8]/10 text-white shadow-md shadow-[#38BDF8]/30'
-                    : 'border-white/10 bg-white/5 text-[#94A3B8]'
+                    ? 'border-[#FFFFFF] bg-[#FFFFFF]/10 text-white shadow-md shadow-[#FFFFFF]/30'
+                    : 'border-white/10 bg-white/5 text-[#A1A1A6]'
                 }`}
               >
                 {enteredPin.length > i ? '●' : ''}
@@ -209,7 +221,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
 
           {pinError && <p className="text-red-400 text-sm font-bold mb-4">{pinError}</p>}
-          {pinLoading && <p className="text-[#38BDF8] text-sm font-bold mb-4">جاري التحقق…</p>}
+          {pinLoading && <p className="text-[#FFFFFF] text-sm font-bold mb-4">جاري التحقق…</p>}
 
           <div className="grid grid-cols-3 gap-3 w-64 mb-6" dir="ltr">
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n, idx) => (
@@ -218,7 +230,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 ref={idx === 0 ? firstKeyRef : undefined}
                 tabIndex={0}
                 onClick={() => handleDigit(n.toString())}
-                className="tv-focusable h-12 rounded-xl bg-white/5 hover:bg-white/10 focus:bg-[#38BDF8] focus:text-[#0A101D] text-xl font-black text-white transition flex items-center justify-center border border-white/5 shadow-sm"
+                className="tv-focusable h-12 rounded-xl bg-white/5 hover:bg-white/10 focus:bg-[#FFFFFF] focus:text-[#0B0B0D] text-xl font-black text-white transition flex items-center justify-center border border-white/5 shadow-sm"
               >
                 {n}
               </button>
@@ -226,27 +238,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <button
               tabIndex={0}
               onClick={() => setEnteredPin((p) => p.slice(0, -1))}
-              className="tv-focusable h-12 rounded-xl bg-white/5 hover:bg-white/10 focus:bg-amber-500 focus:text-[#0A101D] text-sm font-bold text-[#94A3B8] transition flex items-center justify-center border border-white/5"
+              className="tv-focusable h-12 rounded-xl bg-white/5 hover:bg-white/10 focus:bg-amber-500 focus:text-[#0B0B0D] text-sm font-bold text-[#A1A1A6] transition flex items-center justify-center border border-white/5"
             >
               مسح
             </button>
             <button
               tabIndex={0}
               onClick={() => handleDigit('0')}
-              className="tv-focusable h-12 rounded-xl bg-white/5 hover:bg-white/10 focus:bg-[#38BDF8] focus:text-[#0A101D] text-xl font-black text-white transition flex items-center justify-center border border-white/5"
+              className="tv-focusable h-12 rounded-xl bg-white/5 hover:bg-white/10 focus:bg-[#FFFFFF] focus:text-[#0B0B0D] text-xl font-black text-white transition flex items-center justify-center border border-white/5"
             >
               0
             </button>
             <button
               tabIndex={0}
               onClick={onClose}
-              className="tv-focusable h-12 rounded-xl bg-white/5 hover:bg-white/10 focus:bg-red-500 focus:text-white text-sm font-bold text-[#94A3B8] transition flex items-center justify-center border border-white/5"
+              className="tv-focusable h-12 rounded-xl bg-white/5 hover:bg-white/10 focus:bg-red-500 focus:text-white text-sm font-bold text-[#A1A1A6] transition flex items-center justify-center border border-white/5"
             >
               إلغاء
             </button>
           </div>
 
-          <p className="text-xs text-[#64748B] text-center">
+          <p className="text-xs text-[#6E6E73] text-center">
             يمكنك كتابة الرمز مباشرة بأزرار الأرقام في ريموت التلفزيون
           </p>
         </div>
@@ -260,7 +272,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   return (
     <div
       data-tv-modal-root
-      className="fixed inset-0 z-50 bg-[#0A101D]/95 backdrop-blur-lg flex flex-col p-8 select-none text-white overflow-y-auto"
+      className="fixed inset-0 z-50 bg-[#0B0B0D]/95 backdrop-blur-lg flex flex-col p-8 select-none text-white overflow-y-auto"
       onClick={onClose}
     >
       <div
@@ -269,21 +281,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       >
         {/* شريط الإشعارات المؤقتة */}
         {toastMessage && (
-          <div className="fixed top-8 left-1/2 -translate-x-1/2 z-50 bg-[#38BDF8] text-[#0A101D] px-8 py-3.5 rounded-2xl font-extrabold text-lg shadow-2xl flex items-center gap-3 animate-bounce">
-            <span>✨</span>
-            <span>{toastMessage}</span>
-          </div>
+          <AtvToast tone="ok">{toastMessage}</AtvToast>
         )}
 
         {/* ترويسة الإعدادات */}
         <div className="flex items-center justify-between border-b border-white/10 pb-5">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-[#38BDF8]/20 text-[#38BDF8] flex items-center justify-center text-3xl border border-[#38BDF8]/30 shadow-lg shadow-[#38BDF8]/20">
+            <div className="w-14 h-14 rounded-2xl bg-[#FFFFFF]/20 text-[#FFFFFF] flex items-center justify-center text-3xl border border-[#FFFFFF]/30 shadow-lg shadow-[#FFFFFF]/20">
               ⚙️
             </div>
             <div>
               <h1 className="text-3xl font-black text-white">إعدادات الجهاز والتطبيق</h1>
-              <p className="text-sm text-[#94A3B8]">
+              <p className="text-sm text-[#A1A1A6]">
                 لوحة تحكم ولي الأمر · أمان كيدز TV الإصدار 3.2.0
               </p>
             </div>
@@ -293,19 +302,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             ref={firstKeyRef}
             tabIndex={0}
             onClick={onClose}
-            className="tv-focusable px-6 py-3 rounded-2xl bg-white/5 hover:bg-white/10 focus:bg-[#38BDF8] focus:text-[#0A101D] text-base font-bold text-white transition border border-white/10 flex items-center gap-2"
+            className="tv-focusable px-6 py-3 rounded-2xl bg-white/5 hover:bg-white/10 focus:bg-[#FFFFFF] focus:text-[#0B0B0D] text-base font-bold text-white transition border border-white/10 flex items-center gap-2"
           >
             <span>رجوع (Back)</span>
             <span>✕</span>
           </button>
         </div>
 
-        {/* شبكة الأقسام الأربعة */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* القسم 1: معلومات الجهاز والربط */}
-          <div className="bg-[#131E32] border border-white/10 rounded-3xl p-6 flex flex-col gap-4 shadow-xl">
+        {/* قائمة جانبية للأقسام + لوحة محتوى واحدة (بدل الشبكة السابقة) */}
+        <div className="flex gap-6 items-start">
+          <aside className="w-60 flex-shrink-0 flex flex-col gap-2">
+            {SECTIONS.map((s) => (
+              <button
+                key={s.id}
+                tabIndex={0}
+                onClick={() => setActiveSection(s.id)}
+                className={`tv-focusable w-full text-right px-4 py-3.5 rounded-2xl font-bold text-sm transition flex items-center gap-3 ${
+                  activeSection === s.id
+                    ? 'bg-[#FFFFFF] text-[#0B0B0D] shadow-lg shadow-[#FFFFFF]/25'
+                    : 'bg-[#1C1C1E] text-[#D1D1D6] hover:bg-white/10 focus:bg-[#FFFFFF] focus:text-[#0B0B0D] border border-white/10'
+                }`}
+              >
+                <span className="text-lg">{s.icon}</span>
+                <span>{s.label}</span>
+              </button>
+            ))}
+          </aside>
+
+          <div className="flex-1 min-w-0">
+          {/* قسم الأداء: معلومات الجهاز والربط + فحص السرعة */}
+          {activeSection === 'performance' && (
+          <div className="bg-[#1C1C1E] border border-white/10 rounded-3xl p-6 flex flex-col gap-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-white/5 pb-3">
-              <span className="text-lg font-black text-[#38BDF8] flex items-center gap-2">
+              <span className="text-lg font-black text-[#FFFFFF] flex items-center gap-2">
                 <span>📺</span> معلومات الجهاز والاقتران
               </span>
               <span className="text-xs bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full font-bold border border-emerald-500/30">
@@ -315,21 +344,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             <div className="space-y-3 text-sm">
               <div className="flex justify-between items-center py-1 border-b border-white/5">
-                <span className="text-[#94A3B8]">اسم الجهاز في الحساب:</span>
+                <span className="text-[#A1A1A6]">اسم الجهاز في الحساب:</span>
                 <span className="font-bold text-white">{device.name || 'شاشة LG TV'}</span>
               </div>
               <div className="flex justify-between items-center py-1 border-b border-white/5">
-                <span className="text-[#94A3B8]">كود الجهاز الفريد (Device Code):</span>
-                <span className="font-mono font-black text-lg text-[#38BDF8] bg-white/5 px-3 py-1 rounded-xl" dir="ltr">
+                <span className="text-[#A1A1A6]">كود الجهاز الفريد (Device Code):</span>
+                <span className="font-mono font-black text-lg text-[#FFFFFF] bg-white/5 px-3 py-1 rounded-xl" dir="ltr">
                   {device.device_code}
                 </span>
               </div>
               <div className="flex justify-between items-center py-1 border-b border-white/5">
-                <span className="text-[#94A3B8]">موقع لوحة الأهل للإدارة:</span>
+                <span className="text-[#A1A1A6]">موقع لوحة الأهل للإدارة:</span>
                 <span className="font-mono text-emerald-400 font-bold" dir="ltr">tv.nafasoud.com</span>
               </div>
               <div className="flex justify-between items-center py-1">
-                <span className="text-[#94A3B8]">سرعة الاستجابة (Ping):</span>
+                <span className="text-[#A1A1A6]">سرعة الاستجابة (Ping):</span>
                 <div className="flex items-center gap-3">
                   {pingMs !== null && (
                     <span className="font-mono font-bold text-amber-400">{pingMs} ms</span>
@@ -338,7 +367,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     tabIndex={0}
                     onClick={handleTestPing}
                     disabled={isPinging}
-                    className="tv-focusable text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 focus:bg-[#38BDF8] focus:text-[#0A101D] font-bold transition text-[#38BDF8] border border-white/10"
+                    className="tv-focusable text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 focus:bg-[#FFFFFF] focus:text-[#0B0B0D] font-bold transition text-[#FFFFFF] border border-white/10"
                   >
                     {isPinging ? 'جاري الفحص…' : '⚡ فحص السرعة'}
                   </button>
@@ -346,29 +375,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             </div>
           </div>
+          )}
 
-          {/* القسم 2: المحتوى والاشتراكات (IPTV & Content) */}
-          <div className="bg-[#131E32] border border-white/10 rounded-3xl p-6 flex flex-col gap-4 shadow-xl">
+          {/* قسم المحتوى والسيرفرات (بدون أي إدارة حسابات/اشتراكات IPTV — ذلك يبقى عند الأب من موقع الويب فقط) */}
+          {activeSection === 'content' && (
+          <div className="bg-[#1C1C1E] border border-white/10 rounded-3xl p-6 flex flex-col gap-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-white/5 pb-3">
-              <span className="text-lg font-black text-[#38BDF8] flex items-center gap-2">
+              <span className="text-lg font-black text-[#FFFFFF] flex items-center gap-2">
                 <span>📡</span> إدارة المحتوى وسيرفرات البث
               </span>
-              <span className="text-xs bg-white/10 text-[#94A3B8] px-3 py-1 rounded-full font-bold">
+              <span className="text-xs bg-white/10 text-[#A1A1A6] px-3 py-1 rounded-full font-bold">
                 {channelsCount} قناة · {itemsCount} محتوى
               </span>
             </div>
 
             <div className="space-y-3 text-sm">
               <div className="flex justify-between items-center py-1 border-b border-white/5">
-                <span className="text-[#94A3B8]">قنوات البث التلفزيوني المباشر:</span>
+                <span className="text-[#A1A1A6]">قنوات البث التلفزيوني المباشر:</span>
                 <span className="font-bold text-white">{channelsCount} قناة متاحة</span>
               </div>
               <div className="flex justify-between items-center py-1 border-b border-white/5">
-                <span className="text-[#94A3B8]">مكتبة الأفلام والمسلسلات:</span>
+                <span className="text-[#A1A1A6]">مكتبة الأفلام والمسلسلات:</span>
                 <span className="font-bold text-white">{itemsCount} عمل فني</span>
               </div>
               <div className="flex justify-between items-center py-1 border-b border-white/5">
-                <span className="text-[#94A3B8]">اشتراكات سيرفرات الـ IPTV:</span>
+                <span className="text-[#A1A1A6]">اشتراكات سيرفرات الـ IPTV:</span>
                 <span className="font-bold text-amber-400">
                   {iptvSources.length > 0 ? `${iptvSources.length} سيرفر نشط (Xtream)` : 'لا توجد سيرفرات مضافة'}
                 </span>
@@ -379,16 +410,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               tabIndex={0}
               onClick={handleRefreshContent}
               disabled={isRefreshing}
-              className="tv-focusable mt-2 w-full py-3.5 px-4 rounded-2xl bg-[#38BDF8] hover:bg-[#38BDF8]/90 focus:bg-white focus:text-[#0A101D] text-[#0A101D] font-black text-base transition flex items-center justify-center gap-3 shadow-lg shadow-[#38BDF8]/20"
+              className="tv-focusable mt-2 w-full py-3.5 px-4 rounded-2xl bg-[#FFFFFF] hover:bg-[#FFFFFF]/90 focus:bg-white focus:text-[#0B0B0D] text-[#0B0B0D] font-black text-base transition flex items-center justify-center gap-3 shadow-lg shadow-[#FFFFFF]/20"
             >
               <span>{isRefreshing ? 'جاري تحديث السيرفرات…' : 'تحديث المحتوى والسيرفرات الآن 🔄'}</span>
             </button>
           </div>
+          )}
 
-          {/* القسم 3: التحكم الأبوي ومكافآت الوقت وتحدي الأبطال */}
-          <div className="bg-[#131E32] border border-white/10 rounded-3xl p-6 flex flex-col gap-4 shadow-xl">
+          {/* قسم وقت المشاهدة والمكافآت وتحدي الأبطال */}
+          {activeSection === 'time' && (
+          <div className="bg-[#1C1C1E] border border-white/10 rounded-3xl p-6 flex flex-col gap-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-white/5 pb-3">
-              <span className="text-lg font-black text-[#38BDF8] flex items-center gap-2">
+              <span className="text-lg font-black text-[#FFFFFF] flex items-center gap-2">
                 <span>⏱️</span> وقت المشاهدة ومكافأة الأبناء
               </span>
               <span className="text-xs bg-amber-500/20 text-amber-400 px-3 py-1 rounded-full font-bold border border-amber-500/30">
@@ -396,7 +429,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </span>
             </div>
 
-            <p className="text-xs text-[#94A3B8] leading-relaxed">
+            <p className="text-xs text-[#A1A1A6] leading-relaxed">
               إضافة دقائق إضافية لليوم كمكافأة للأطفال عند انتهاء الوقت المسموح به:
             </p>
 
@@ -404,7 +437,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <button
                 tabIndex={0}
                 onClick={() => handleAddBonus(15)}
-                className="tv-focusable py-3 px-2 rounded-xl bg-white/5 hover:bg-white/10 focus:bg-[#38BDF8] focus:text-[#0A101D] text-sm font-black text-white transition border border-white/10 flex flex-col items-center gap-1"
+                className="tv-focusable py-3 px-2 rounded-xl bg-white/5 hover:bg-white/10 focus:bg-[#FFFFFF] focus:text-[#0B0B0D] text-sm font-black text-white transition border border-white/10 flex flex-col items-center gap-1"
               >
                 <span>+15 دقيقة</span>
                 <span className="text-xs opacity-75">مكافأة 🎁</span>
@@ -412,7 +445,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <button
                 tabIndex={0}
                 onClick={() => handleAddBonus(30)}
-                className="tv-focusable py-3 px-2 rounded-xl bg-white/5 hover:bg-white/10 focus:bg-[#38BDF8] focus:text-[#0A101D] text-sm font-black text-white transition border border-white/10 flex flex-col items-center gap-1"
+                className="tv-focusable py-3 px-2 rounded-xl bg-white/5 hover:bg-white/10 focus:bg-[#FFFFFF] focus:text-[#0B0B0D] text-sm font-black text-white transition border border-white/10 flex flex-col items-center gap-1"
               >
                 <span>+30 دقيقة</span>
                 <span className="text-xs opacity-75">مكافأة 🎁</span>
@@ -420,7 +453,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <button
                 tabIndex={0}
                 onClick={() => handleAddBonus(60)}
-                className="tv-focusable py-3 px-2 rounded-xl bg-white/5 hover:bg-white/10 focus:bg-[#38BDF8] focus:text-[#0A101D] text-sm font-black text-white transition border border-white/10 flex flex-col items-center gap-1"
+                className="tv-focusable py-3 px-2 rounded-xl bg-white/5 hover:bg-white/10 focus:bg-[#FFFFFF] focus:text-[#0B0B0D] text-sm font-black text-white transition border border-white/10 flex flex-col items-center gap-1"
               >
                 <span>+60 دقيقة</span>
                 <span className="text-xs opacity-75">مكافأة 🎁</span>
@@ -436,7 +469,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <button
                   tabIndex={0}
                   onClick={() => setQuizIndex((i) => (i + 1) % QUIZ_LIST.length)}
-                  className="tv-focusable text-xs bg-white/10 hover:bg-white/20 px-3 py-1 rounded-lg text-[#94A3B8]"
+                  className="tv-focusable text-xs bg-white/10 hover:bg-white/20 px-3 py-1 rounded-lg text-[#A1A1A6]"
                 >
                   سؤال آخر 🔄
                 </button>
@@ -456,7 +489,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         showToast('حاول مرة أخرى يا بطل! 💪');
                       }
                     }}
-                    className="tv-focusable py-3 rounded-xl bg-white/10 hover:bg-white/20 focus:bg-[#38BDF8] focus:text-[#0A101D] text-base font-black text-white transition text-center"
+                    className="tv-focusable py-3 rounded-xl bg-white/10 hover:bg-white/20 focus:bg-[#FFFFFF] focus:text-[#0B0B0D] text-base font-black text-white transition text-center"
                   >
                     {opt}
                   </button>
@@ -464,80 +497,86 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             </div>
           </div>
+          )}
 
-          {/* القسم 4: الذاكرة والتخزين وسجل المشاهدة */}
-          <div className="bg-[#131E32] border border-white/10 rounded-3xl p-6 flex flex-col gap-4 shadow-xl">
+          {/* قسم الذاكرة وسجل المشاهدة */}
+          {activeSection === 'storage' && (
+          <div className="bg-[#1C1C1E] border border-white/10 rounded-3xl p-6 flex flex-col gap-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-white/5 pb-3">
-              <span className="text-xl font-black text-[#38BDF8] flex items-center gap-2">
+              <span className="text-xl font-black text-[#FFFFFF] flex items-center gap-2">
                 <span>🧹</span> الذاكرة وسجل المشاهدة
               </span>
-              <span className="text-sm bg-white/10 text-[#94A3B8] px-3 py-1 rounded-full font-bold">
+              <span className="text-sm bg-white/10 text-[#A1A1A6] px-3 py-1 rounded-full font-bold">
                 تخزين محلي
               </span>
             </div>
 
-            <p className="text-sm text-[#94A3B8] leading-relaxed">
+            <p className="text-sm text-[#A1A1A6] leading-relaxed">
               إعادة تعيين سجل متابعة المشاهدة (Continue Watching) والبدء من جديد:
             </p>
 
             <button
               tabIndex={0}
               onClick={handleClearResume}
-              className="tv-focusable py-4 px-5 rounded-2xl bg-white/5 hover:bg-white/10 focus:bg-amber-500 focus:text-[#0A101D] text-amber-400 font-bold text-base transition border border-amber-500/20 flex items-center justify-center gap-3"
+              className="tv-focusable py-4 px-5 rounded-2xl bg-white/5 hover:bg-white/10 focus:bg-amber-500 focus:text-[#0B0B0D] text-amber-400 font-bold text-base transition border border-amber-500/20 flex items-center justify-center gap-3"
             >
               <span>مسح سجل متابعة المشاهدة 🗑️</span>
             </button>
           </div>
-        </div>
+          )}
 
-        {/* الشريط السفلي: فك الربط والخروج */}
-        <div className="bg-[#131E32]/70 border border-white/10 rounded-3xl p-6 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span className="text-3xl">⚠️</span>
-            <div>
-              <p className="text-base font-bold text-white">إعادة تعيين أو الخروج من التطبيق</p>
-              <p className="text-sm text-[#64748B]">
-                يمكنك إعادة ربط التلفزيون بحساب آخر أو إغلاق التطبيق نهائياً
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            {confirmReset ? (
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-red-400 font-bold">هل أنت متأكد من فك الربط؟</span>
-                <button
-                  tabIndex={0}
-                  onClick={onResetDevice}
-                  className="tv-focusable px-5 py-2.5 rounded-xl bg-red-600 focus:bg-white focus:text-red-600 text-sm font-black text-white transition"
-                >
-                  نعم، فك الربط الآن
-                </button>
-                <button
-                  tabIndex={0}
-                  onClick={() => setConfirmReset(false)}
-                  className="tv-focusable px-5 py-2.5 rounded-xl bg-white/10 focus:bg-white focus:text-[#0A101D] text-sm font-bold text-white transition"
-                >
-                  إلغاء
-                </button>
+          {/* قسم الرقابة الأبوية: فك الربط والخروج */}
+          {activeSection === 'parental' && (
+          <div className="bg-[#1C1C1E]/70 border border-white/10 rounded-3xl p-6 flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">⚠️</span>
+              <div>
+                <p className="text-base font-bold text-white">إعادة تعيين أو الخروج من التطبيق</p>
+                <p className="text-sm text-[#6E6E73]">
+                  يمكنك إعادة ربط التلفزيون بحساب آخر أو إغلاق التطبيق نهائياً
+                </p>
               </div>
-            ) : (
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4">
+              {confirmReset ? (
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-red-400 font-bold">هل أنت متأكد من فك الربط؟</span>
+                  <button
+                    tabIndex={0}
+                    onClick={onResetDevice}
+                    className="tv-focusable px-5 py-2.5 rounded-xl bg-red-600 focus:bg-white focus:text-red-600 text-sm font-black text-white transition"
+                  >
+                    نعم، فك الربط الآن
+                  </button>
+                  <button
+                    tabIndex={0}
+                    onClick={() => setConfirmReset(false)}
+                    className="tv-focusable px-5 py-2.5 rounded-xl bg-white/10 focus:bg-white focus:text-[#0B0B0D] text-sm font-bold text-white transition"
+                  >
+                    إلغاء
+                  </button>
+                </div>
+              ) : (
+                <button
+                  tabIndex={0}
+                  onClick={() => setConfirmReset(true)}
+                  className="tv-focusable px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 focus:bg-amber-500 focus:text-[#0B0B0D] text-sm font-bold text-[#A1A1A6] transition border border-white/10"
+                >
+                  إعادة ربط الجهاز بكود جديد 🔄
+                </button>
+              )}
+
               <button
                 tabIndex={0}
-                onClick={() => setConfirmReset(true)}
-                className="tv-focusable px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 focus:bg-amber-500 focus:text-[#0A101D] text-sm font-bold text-[#94A3B8] transition border border-white/10"
+                onClick={onExitApp}
+                className="tv-focusable px-7 py-3 rounded-xl bg-red-500/20 hover:bg-red-500/30 focus:bg-red-500 focus:text-white text-base font-black text-red-400 transition border border-red-500/30 flex items-center gap-2"
               >
-                إعادة ربط الجهاز بكود جديد 🔄
+                <span>الخروج من التطبيق 🔴</span>
               </button>
-            )}
-
-            <button
-              tabIndex={0}
-              onClick={onExitApp}
-              className="tv-focusable px-7 py-3 rounded-xl bg-red-500/20 hover:bg-red-500/30 focus:bg-red-500 focus:text-white text-base font-black text-red-400 transition border border-red-500/30 flex items-center gap-2"
-            >
-              <span>الخروج من التطبيق 🔴</span>
-            </button>
+            </div>
+          </div>
+          )}
           </div>
         </div>
       </div>

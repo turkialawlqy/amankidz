@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, Suspense, lazy } from 'react';
+import React, { useEffect, useRef, useState, useCallback, Suspense, lazy } from 'react';
 import type {
   Device,
   ContentItem,
@@ -34,6 +34,9 @@ import { HomeScreen } from './components/HomeScreen';
 import { BrandMark } from './components/BrandMark';
 import { useRemoteKeys } from './hooks/useRemoteKeys';
 import { soundEffects } from './services/sound';
+import { ResumePrompt } from './components/ResumePrompt';
+import { AtvSpinner } from './components/AtvSpinner';
+import { getContinueWatchingList, type ProgressItem } from './services/resume';
 
 // تحميل كسول (Code Splitting) للمكونات الثقيلة غير المطلوبة في أول رسم للشاشة
 // (المشغّل خصوصاً يجر مكتبة hls.js كاملة معه) — يقلّل من حجم الحزمة الأولى
@@ -68,6 +71,9 @@ export const App: React.FC = () => {
   const [showExitModal, setShowExitModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [tvMessage, setTvMessage] = useState<string | null>(null);
+  // نافذة "استئناف المتابعة" تظهر مرة واحدة عند فتح التطبيق
+  const [resumeOffer, setResumeOffer] = useState<ProgressItem | null>(null);
+  const resumeOfferShownRef = useRef(false);
 
   // تحديث البيانات من الخادم
   const loadData = useCallback(async (dev: Device) => {
@@ -237,9 +243,18 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('online', handleOnline);
   }, [state.type, device, initApp, loadData]);
 
+  useEffect(() => {
+    if (resumeOfferShownRef.current || state.type !== 'ready' || !device || device.locked) return;
+    resumeOfferShownRef.current = true;
+    const last = getContinueWatchingList().find((e) => !!e.item);
+    if (last) setResumeOffer(last);
+  }, [state.type, device]);
+
   // إغلاق النوافذ عند الضغط على زر الرجوع في ريموت LG
   const handleRemoteBack = useCallback(() => {
-    if (playingItem) {
+    if (resumeOffer) {
+      setResumeOffer(null);
+    } else if (playingItem) {
       setPlayingItem(null);
     } else if (openCollection) {
       setOpenCollection(null);
@@ -254,7 +269,7 @@ export const App: React.FC = () => {
     } else {
       setShowExitModal(true);
     }
-  }, [playingItem, openCollection, selectedItem, showSettingsModal, showProfileModal, showExitModal]);
+  }, [resumeOffer, playingItem, openCollection, selectedItem, showSettingsModal, showProfileModal, showExitModal]);
 
   useRemoteKeys({
     onBack: handleRemoteBack,
@@ -287,11 +302,10 @@ export const App: React.FC = () => {
   // شاشة التحميل
   if (state.type === 'loading') {
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-[#181C2B] text-white">
-        <BrandMark size={80} className="mb-6 animate-pulse" />
-        <h1 className="text-3xl font-black mb-4">أمان كيدز TV</h1>
-        <div className="w-10 h-10 border-4 border-[#2FD3BF] border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-[#A7ADBF] text-lg">{state.text}</p>
+      <div className="w-full h-full flex flex-col items-center justify-center bg-[#0B0B0D] text-white">
+        <BrandMark size={84} className="mb-10 atv-rise" />
+        <AtvSpinner size={40} className="mb-5" />
+        <p className="text-white/55 text-base font-medium">{state.text}</p>
       </div>
     );
   }
@@ -299,14 +313,14 @@ export const App: React.FC = () => {
   // شاشة الخطأ
   if (state.type === 'error') {
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-[#181C2B] text-white p-12 text-center">
+      <div className="w-full h-full flex flex-col items-center justify-center bg-[#0B0B0D] text-white p-12 text-center">
         <div className="text-6xl mb-6">⚠️</div>
         <h2 className="text-3xl font-bold mb-4">خطأ في الاتصال</h2>
-        <p className="text-[#A7ADBF] text-xl mb-8 max-w-lg">{state.message}</p>
+        <p className="text-[#A1A1A6] text-xl mb-8 max-w-lg">{state.message}</p>
         <button
           tabIndex={0}
           onClick={initApp}
-          className="tv-focusable bg-[#2FD3BF] text-[#0E1A24] font-bold text-xl px-10 py-4 rounded-2xl shadow-xl focus:ring-4 focus:ring-white"
+          className="tv-focusable bg-[#FFFFFF] text-[#0B0B0D] font-bold text-xl px-10 py-4 rounded-2xl shadow-xl focus:ring-4 focus:ring-white"
         >
           إعادة المحاولة
         </button>
@@ -328,35 +342,109 @@ export const App: React.FC = () => {
   // شاشة قفل التلفزيون بطلب الأهل
   if (device?.locked) {
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-[#181C2B] text-white p-12 text-center select-none">
+      <div className="w-full h-full flex flex-col items-center justify-center bg-[#0B0B0D] text-white p-12 text-center select-none">
         <div className="w-28 h-28 rounded-3xl bg-red-500/20 text-red-400 flex items-center justify-center text-6xl mb-6 border border-red-500/30">
           🔒
         </div>
         <h1 className="text-4xl font-extrabold mb-4">التلفزيون مقفل</h1>
-        <p className="text-[#A7ADBF] text-xl max-w-md">
+        <p className="text-[#A1A1A6] text-xl max-w-md">
           تم قفل التلفزيون من قبل ولي الأمر. يمكنك فتحه مجدداً من لوحة التحكم.
         </p>
       </div>
     );
   }
 
+  const handleSelectItem = async (item: ContentItem) => {
+    if (item.parent_id) {
+      // هذا العنصر حلقة من مسلسل أو قائمة تجميعية!
+      let eps = items.filter((it) => it.parent_id === item.parent_id);
+      if (eps.length === 0 && item.parent_id.startsWith('xs:')) {
+        // جلب حلقات المسلسل من Xtream إذا لم تكن محملة بعد
+        const src = iptv.find((s) => item.parent_id!.includes(s.id)) || iptv[0];
+        const seriesId = item.parent_id.split(':').pop()!;
+        if (src && seriesId) {
+          try {
+            const { episodes } = await getXtreamSeriesDetails(src, seriesId);
+            setItems((prev) => {
+              const filtered = prev.filter((p) => p.parent_id !== item.parent_id);
+              return [...filtered, ...episodes];
+            });
+            eps = episodes;
+          } catch (e) {
+            console.warn('Failed to load series sibling episodes:', e);
+          }
+        }
+      }
+      setCurrentPlaylist(eps.length > 0 ? eps : [item]);
+      setPlayingItem(item);
+      return;
+    }
+    
+    if (item.id.startsWith('xs:')) {
+      // جلب حلقات مسلسل من اشتراك Xtream
+      const src = iptv.find((s) => item.id.includes(s.id)) || iptv[0];
+      const seriesId = item.id.split(':').pop()!;
+      try {
+        const { episodes } = await getXtreamSeriesDetails(src, seriesId);
+        setItems((prev) => {
+          const filtered = prev.filter((p) => p.parent_id !== item.id);
+          return [...filtered, ...episodes];
+        });
+        setSelectedItem(item);
+      } catch (e) {
+        console.warn('Failed to load series episodes:', e);
+        setSelectedItem(item);
+      }
+    } else if (
+      item.kind === 'channel' ||
+      item.kind === 'playlist' ||
+      (item.kind === 'mix' && !item.description)
+    ) {
+      setOpenCollection(item);
+    } else if (
+      item.kind === 'video' &&
+      !item.description &&
+      (!item.cast_list || item.cast_list.length === 0)
+    ) {
+      setPlayingItem(item);
+    } else {
+      setSelectedItem(item);
+    }
+  };
+
   return (
-    <div className="w-full h-full relative overflow-hidden bg-[#181C2B]">
+    <div className="w-full h-full relative overflow-hidden bg-[#0B0B0D]">
       {/* رسالة فورية صوتية ومرئية من ولي الأمر من الجوال */}
       {tvMessage && (
-        <div className="fixed top-8 left-1/2 -translate-x-1/2 z-50 bg-[#38BDF8] text-[#0A101D] font-black text-xl px-9 py-4 rounded-3xl shadow-2xl flex items-center gap-5 border-2 border-white/40 animate-bounce select-none">
-          <span className="text-3xl">👨‍👩‍👧‍👦</span>
-          <div>
-            <span className="text-xs text-[#0A101D]/75 block font-bold">رسالة فورية من ولي الأمر:</span>
-            <span>{tvMessage}</span>
+        <div className="atv-toast atv-toast-info atv-toast-lg" style={{ top: 40 }} role="alert">
+          <span className="atv-toast-icon text-3xl">👨‍👩‍👧‍👦</span>
+          <div className="min-w-0">
+            <span className="block text-xs font-bold text-white/55 mb-0.5">رسالة من ولي الأمر</span>
+            <span className="block text-lg font-bold text-white">{tvMessage}</span>
           </div>
-          <button
-            onClick={() => setTvMessage(null)}
-            className="text-xs bg-[#0A101D] text-white px-3.5 py-2 rounded-xl font-bold hover:scale-105 transition"
-          >
-            حسناً يا أبي ✓
+          <button tabIndex={0} onClick={() => setTvMessage(null)} className="atv-btn-primary h-11 px-5 rounded-full text-sm font-bold mr-2">
+            حسناً
           </button>
         </div>
+      )}
+
+      {resumeOffer && !playingItem && (
+        <ResumePrompt
+          entry={resumeOffer}
+          onCancel={() => setResumeOffer(null)}
+          onResume={() => {
+            const it = resumeOffer.item;
+            setResumeOffer(null);
+            if (!it) return;
+            if (it.parent_id) {
+              // حلقة: نفس مسار الحلقات (يحمّل باقي الحلقات للتالي/السابق)
+              handleSelectItem(it);
+            } else {
+              setCurrentPlaylist([it]);
+              setPlayingItem(it);
+            }
+          }}
+        />
       )}
 
       {/* الشاشة الرئيسية */}
@@ -375,63 +463,7 @@ export const App: React.FC = () => {
           onRefresh={() => {
             if (device) loadData(device);
           }}
-          onSelectItem={async (item) => {
-            if (item.parent_id) {
-              // هذا العنصر حلقة من مسلسل أو قائمة تجميعية!
-              let eps = items.filter((it) => it.parent_id === item.parent_id);
-              if (eps.length === 0 && item.parent_id.startsWith('xs:')) {
-                // جلب حلقات المسلسل من Xtream إذا لم تكن محملة بعد
-                const src = iptv.find((s) => item.parent_id!.includes(s.id)) || iptv[0];
-                const seriesId = item.parent_id.split(':').pop()!;
-                if (src && seriesId) {
-                  try {
-                    const { episodes } = await getXtreamSeriesDetails(src, seriesId);
-                    setItems((prev) => {
-                      const filtered = prev.filter((p) => p.parent_id !== item.parent_id);
-                      return [...filtered, ...episodes];
-                    });
-                    eps = episodes;
-                  } catch (e) {
-                    console.warn('Failed to load series sibling episodes:', e);
-                  }
-                }
-              }
-              setCurrentPlaylist(eps.length > 0 ? eps : [item]);
-              setPlayingItem(item);
-              return;
-            }
-
-            if (item.id.startsWith('xs:')) {
-              // جلب حلقات مسلسل من اشتراك Xtream
-              const src = iptv.find((s) => item.id.includes(s.id)) || iptv[0];
-              const seriesId = item.id.split(':').pop()!;
-              try {
-                const { episodes } = await getXtreamSeriesDetails(src, seriesId);
-                setItems((prev) => {
-                  const filtered = prev.filter((p) => p.parent_id !== item.id);
-                  return [...filtered, ...episodes];
-                });
-                setSelectedItem(item);
-              } catch (e) {
-                console.warn('Failed to load series episodes:', e);
-                setSelectedItem(item);
-              }
-            } else if (
-              item.kind === 'channel' ||
-              item.kind === 'playlist' ||
-              (item.kind === 'mix' && !item.description)
-            ) {
-              setOpenCollection(item);
-            } else if (
-              item.kind === 'video' &&
-              !item.description &&
-              (!item.cast_list || item.cast_list.length === 0)
-            ) {
-              setPlayingItem(item);
-            } else {
-              setSelectedItem(item);
-            }
-          }}
+          onSelectItem={handleSelectItem}
           onSelectChannel={(ch) => {
             // تشغيل القناة المباشرة
             const chItem: ContentItem = {
@@ -500,7 +532,7 @@ export const App: React.FC = () => {
         <Suspense
           fallback={
             <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
-              <div className="w-12 h-12 border-4 border-[#2FD3BF] border-t-transparent rounded-full animate-spin" />
+              <AtvSpinner size={52} />
             </div>
           }
         >

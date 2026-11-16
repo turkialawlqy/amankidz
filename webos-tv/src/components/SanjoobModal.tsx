@@ -121,19 +121,19 @@ export const SanjoobModal: React.FC<SanjoobModalProps> = ({ isOpen, onClose }) =
 
   return (
     <div data-tv-modal-root className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-8 select-none">
-      <div className="w-full max-w-6xl h-[88vh] bg-[#0E1626] border-2 border-[#38BDF8]/40 rounded-3xl p-8 flex flex-col shadow-2xl text-white overflow-hidden relative">
+      <div className="w-full max-w-6xl h-[88vh] bg-[#0E1626] border-2 border-[#FFFFFF]/40 rounded-3xl p-8 flex flex-col shadow-2xl text-white overflow-hidden relative">
         {/* رأس النافذة */}
         <div className="flex items-center justify-between border-b border-white/10 pb-5 mb-6">
           <div className="flex items-center gap-4">
             <span className="text-5xl animate-bounce">🐿️</span>
             <div>
-              <h2 className="text-3xl font-black text-[#38BDF8] flex items-center gap-3">
+              <h2 className="text-3xl font-black text-[#FFFFFF] flex items-center gap-3">
                 <span>المساعد الذكي "سنجوب"</span>
                 <span className="text-xs bg-amber-400/20 text-amber-300 px-3 py-1 rounded-full border border-amber-400/30">
                   صديق الأطفال المعرفي
                 </span>
               </h2>
-              <p className="text-base text-[#94A3B8] mt-1">
+              <p className="text-base text-[#A1A1A6] mt-1">
                 اختر أي سؤال يدور في ذهنك وسيشرحه لك سنجوب بالصوت والصورة!
               </p>
             </div>
@@ -152,7 +152,7 @@ export const SanjoobModal: React.FC<SanjoobModalProps> = ({ isOpen, onClose }) =
         <div className="flex-1 grid grid-cols-12 gap-8 overflow-hidden">
           {/* قائمة الأسئلة (5 أعمدة) */}
           <div className="col-span-5 overflow-y-auto space-y-3 pr-2">
-            <span className="text-sm font-bold text-[#64748B] block mb-2 uppercase tracking-wider">
+            <span className="text-sm font-bold text-[#6E6E73] block mb-2 uppercase tracking-wider">
               أسئلة الأبطال الأذكياء:
             </span>
             {SANJOOB_KNOWLEDGE.map((qa, idx) => (
@@ -166,14 +166,14 @@ export const SanjoobModal: React.FC<SanjoobModalProps> = ({ isOpen, onClose }) =
                 }}
                 className={`tv-focusable w-full text-right p-4 rounded-2xl flex items-center gap-4 transition border ${
                   selectedQA.id === qa.id
-                    ? 'bg-[#38BDF8] text-[#0A101D] font-black border-white shadow-lg shadow-[#38BDF8]/30 scale-[1.02]'
+                    ? 'bg-[#FFFFFF] text-[#0B0B0D] font-black border-white shadow-lg shadow-[#FFFFFF]/30 scale-[1.02]'
                     : 'bg-white/5 hover:bg-white/10 text-white border-white/5'
                 }`}
               >
                 <span className="text-3xl">{qa.icon}</span>
                 <div className="flex-1 truncate">
                   <span className="text-lg font-bold block truncate">{qa.question}</span>
-                  <span className={`text-xs block ${selectedQA.id === qa.id ? 'text-[#0A101D]/75' : 'text-[#94A3B8]'}`}>
+                  <span className={`text-xs block ${selectedQA.id === qa.id ? 'text-[#0B0B0D]/75' : 'text-[#A1A1A6]'}`}>
                     {qa.category}
                   </span>
                 </div>
@@ -185,11 +185,11 @@ export const SanjoobModal: React.FC<SanjoobModalProps> = ({ isOpen, onClose }) =
           {/* لوحة الإجابة التفاعلية مع سنجوب (7 أعمدة) */}
           <div className="col-span-7 bg-[#141E33] border border-white/10 rounded-3xl p-8 flex flex-col justify-between shadow-inner relative overflow-hidden">
             {/* خلفية جمالية */}
-            <div className="absolute top-0 left-0 w-64 h-64 bg-[#38BDF8]/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute top-0 left-0 w-64 h-64 bg-[#FFFFFF]/10 rounded-full blur-3xl pointer-events-none" />
 
             <div className="space-y-6 relative z-10">
               <div className="flex items-center justify-between">
-                <span className="bg-[#38BDF8]/20 text-[#38BDF8] text-sm font-black px-4 py-1.5 rounded-xl border border-[#38BDF8]/30">
+                <span className="bg-[#FFFFFF]/20 text-[#FFFFFF] text-sm font-black px-4 py-1.5 rounded-xl border border-[#FFFFFF]/30">
                   {selectedQA.category}
                 </span>
                 <div className="flex items-center gap-2">
@@ -208,14 +208,14 @@ export const SanjoobModal: React.FC<SanjoobModalProps> = ({ isOpen, onClose }) =
               </h3>
 
               {/* بطاقة الإجابة المختصرة */}
-              <div className="bg-[#38BDF8]/10 border-r-4 border-[#38BDF8] p-4 rounded-xl">
-                <p className="text-xl font-black text-[#38BDF8]">
+              <div className="bg-[#FFFFFF]/10 border-r-4 border-[#FFFFFF] p-4 rounded-xl">
+                <p className="text-xl font-black text-[#FFFFFF]">
                   "{selectedQA.shortAnswer}"
                 </p>
               </div>
 
               {/* الشرح التفصيلي اللطيف */}
-              <div className="text-xl text-[#CBD5E1] leading-relaxed space-y-3 font-medium">
+              <div className="text-xl text-[#D1D1D6] leading-relaxed space-y-3 font-medium">
                 <p>{selectedQA.detailedAnswer}</p>
               </div>
             </div>
@@ -226,7 +226,7 @@ export const SanjoobModal: React.FC<SanjoobModalProps> = ({ isOpen, onClose }) =
                 <button
                   tabIndex={0}
                   onClick={() => speakText(selectedQA.detailedAnswer)}
-                  className="tv-focusable bg-[#2563EB] hover:bg-[#1D4ED8] focus:bg-[#38BDF8] focus:text-[#0A101D] text-white font-black text-lg px-7 py-3.5 rounded-2xl shadow-xl flex items-center gap-3 transition"
+                  className="tv-focusable bg-[#2C2C2E] hover:bg-[#3A3A3C] focus:bg-[#FFFFFF] focus:text-[#0B0B0D] text-white font-black text-lg px-7 py-3.5 rounded-2xl shadow-xl flex items-center gap-3 transition"
                 >
                   <span className="text-2xl">{isSpeaking ? '🔊' : '🗣️'}</span>
                   <span>{isSpeaking ? 'أعد القراءة بالصوت' : 'اسمع إجابة سنجوب'}</span>
@@ -248,7 +248,7 @@ export const SanjoobModal: React.FC<SanjoobModalProps> = ({ isOpen, onClose }) =
                 )}
               </div>
 
-              <div className="text-left text-xs text-[#94A3B8]">
+              <div className="text-left text-xs text-[#A1A1A6]">
                 <span>نصيحة سنجوب: كُن دائم الفضول واسأل دائماً! 🌟</span>
               </div>
             </div>

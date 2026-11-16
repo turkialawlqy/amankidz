@@ -30,22 +30,20 @@ export const ContentCard: React.FC<ContentCardProps> = ({
           onSelect(item);
         }
       }}
-      className={`tv-focusable ${width} flex-shrink-0 flex flex-col group cursor-pointer focus:outline-none rounded-xl`}
+      className={`atv-item ${width} flex-shrink-0 flex flex-col group`}
     >
       <div
-        className={`relative w-full ${
-          aspectRatio === 'backdrop' ? 'aspect-video' : 'aspect-[2/3]'
-        } rounded-xl overflow-hidden bg-[#212639] border-2 border-transparent group-focus:border-[#2FD3BF] group-focus:shadow-xl group-focus:shadow-[#2FD3BF]/20 transition-all duration-150`}
+        className={`atv-card w-full ${aspectRatio === 'backdrop' ? 'aspect-video' : 'aspect-[2/3]'}`}
       >
         {image ? (
           <img
             src={image}
             alt={item.title}
-            className="w-full h-full object-cover group-focus:scale-105 transition-transform duration-200"
+            className="w-full h-full object-cover"
             loading="lazy"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center p-4 text-center text-sm font-medium text-[#A7ADBF]">
+          <div className="w-full h-full flex items-center justify-center p-4 text-center text-sm font-medium text-[#A1A1A6]">
             {item.title}
           </div>
         )}
@@ -65,11 +63,11 @@ export const ContentCard: React.FC<ContentCardProps> = ({
         )}
       </div>
 
-      <div className="mt-2 text-right">
-        <h4 className="text-sm font-medium text-white truncate group-focus:text-[#2FD3BF] transition-colors">
+      <div className="atv-caption">
+        <h4 className="truncate">
           {item.title}
         </h4>
-        {item.year && <span className="text-xs text-[#A7ADBF]">{item.year}</span>}
+        {item.year && <span className="text-xs atv-sub">{item.year}</span>}
       </div>
     </div>
   );

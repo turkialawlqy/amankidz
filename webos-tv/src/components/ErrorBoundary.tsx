@@ -27,17 +27,17 @@ export class ErrorBoundary extends React.Component<React.PropsWithChildren, Erro
   render() {
     if (this.state.error) {
       return (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-[#181C2B] text-white p-12 text-center select-none">
+        <div className="w-full h-full flex flex-col items-center justify-center bg-[#0B0B0D] text-white p-12 text-center select-none">
           <div className="text-6xl mb-6">⚠️</div>
           <h2 className="text-3xl font-bold mb-4">حدث خطأ غير متوقع</h2>
-          <p className="text-[#A7ADBF] text-xl mb-8 max-w-lg">
+          <p className="text-[#A1A1A6] text-xl mb-8 max-w-lg">
             واجه التطبيق مشكلة فنية. أعد التشغيل وسيتم حل الأمر غالباً تلقائياً.
           </p>
           <button
             tabIndex={0}
             autoFocus
             onClick={this.handleReload}
-            className="tv-focusable bg-[#2FD3BF] text-[#0E1A24] font-bold text-xl px-10 py-4 rounded-2xl shadow-xl focus:ring-4 focus:ring-white"
+            className="tv-focusable bg-[#FFFFFF] text-[#0B0B0D] font-bold text-xl px-10 py-4 rounded-2xl shadow-xl focus:ring-4 focus:ring-white"
           >
             إعادة تشغيل التطبيق
           </button>

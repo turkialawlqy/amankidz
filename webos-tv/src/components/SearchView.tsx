@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { AtvSpinner } from './AtvSpinner';
+import { AtvToast } from './AtvAlert';
 import type { IptvSource, LiveChannel, ContentItem } from '../types';
 import { searchXtream } from '../services/xtream';
 
@@ -16,6 +18,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [results, setResults] = useState<{
     live: LiveChannel[];
     vod: ContentItem[];
@@ -43,7 +46,8 @@ export const SearchView: React.FC<SearchViewProps> = ({
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      alert('ميزة البحث الصوتي غير مدعومة في نظام هذا المتصفح/الشاشة');
+      setNotice('البحث الصوتي غير مدعوم على هذه الشاشة');
+      setTimeout(() => setNotice(null), 3000);
       return;
     }
 
@@ -82,7 +86,8 @@ export const SearchView: React.FC<SearchViewProps> = ({
     results.live.length + results.vod.length + results.series.length;
 
   return (
-    <div className="w-full h-full flex flex-col p-8 bg-[#181C2B] text-white overflow-y-auto">
+    <div className="w-full h-full flex flex-col p-8 bg-[#0B0B0D] text-white overflow-y-auto">
+      {notice && <AtvToast tone="warn">{notice}</AtvToast>}
       {/* خانة البحث */}
       <div className="max-w-2xl mx-auto w-full mb-8">
         <h2 className="text-2xl font-black text-white mb-4 text-center">
@@ -96,7 +101,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
             value={query}
             placeholder="اكتب اسم القناة، الفيلم، أو المسلسل…"
             onChange={(e) => handleSearch(e.target.value)}
-            className="tv-focusable flex-1 bg-[#212639] border-2 border-white/10 focus:border-[#38BDF8] rounded-2xl px-6 py-4 text-lg font-bold text-white placeholder-[#A7ADBF] focus:outline-none transition shadow-lg text-right"
+            className="tv-focusable flex-1 bg-[#1C1C1E] border-2 border-white/10 focus:border-[#FFFFFF] rounded-2xl px-6 py-4 text-lg font-bold text-white placeholder-[#A1A1A6] focus:outline-none transition shadow-lg text-right"
           />
 
           {/* زر البحث الصوتي بالمايكروفون */}
@@ -106,7 +111,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
             className={`tv-focusable px-5 py-4 rounded-2xl font-black text-lg transition flex items-center gap-2 border border-white/10 ${
               isListening
                 ? 'bg-red-500 text-white animate-pulse'
-                : 'bg-white/10 hover:bg-white/20 text-[#38BDF8] focus:bg-[#38BDF8] focus:text-[#0A101D]'
+                : 'bg-white/10 hover:bg-white/20 text-[#FFFFFF] focus:bg-[#FFFFFF] focus:text-[#0B0B0D]'
             }`}
             title="بحث صوتي (تحدث الآن)"
           >
@@ -126,21 +131,21 @@ export const SearchView: React.FC<SearchViewProps> = ({
         </div>
 
         {isListening && (
-          <p className="text-center text-sm font-bold text-[#38BDF8] mt-3 animate-pulse">
+          <p className="text-center text-sm font-bold text-[#FFFFFF] mt-3 animate-pulse">
             🎙️ تحدّث الآن باسم المحتوى بصوت واضح…
           </p>
         )}
       </div>
 
       {loading && (
-        <div className="flex flex-col items-center justify-center py-12 text-[#A7ADBF]">
-          <div className="w-10 h-10 border-4 border-[#2FD3BF] border-t-transparent rounded-full animate-spin mb-4" />
+        <div className="flex flex-col items-center justify-center py-12 text-[#A1A1A6]">
+          <AtvSpinner className="mb-5" />
           <p>جاري البحث في الاشتراك…</p>
         </div>
       )}
 
       {!loading && query && totalResults === 0 && (
-        <div className="text-center py-16 text-[#A7ADBF]">
+        <div className="text-center py-16 text-[#A1A1A6]">
           <span className="text-5xl mb-3 block">🔍</span>
           <p className="text-xl font-bold text-white mb-1">لا توجد نتائج مطابقة</p>
           <p className="text-sm">تأكد من كتابة الاسم بشكل صحيح أو جرب كلمة بحث أخرى</p>
@@ -153,13 +158,13 @@ export const SearchView: React.FC<SearchViewProps> = ({
           <h3 className="text-xl font-black text-white mb-4">
             قنوات البث المباشر ({results.live.length})
           </h3>
-          <div className="grid grid-cols-4 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-4 lg:grid-cols-6 gap-x-7 gap-y-4 pt-2">
             {results.live.map((ch) => (
               <button
                 key={ch.id}
                 tabIndex={0}
                 onClick={() => onSelectChannel(ch)}
-                className="tv-focusable bg-[#212639] hover:bg-[#2A314A] focus:bg-[#2FD3BF] focus:text-[#0E1A24] p-3 rounded-2xl flex flex-col items-center justify-center text-center shadow-md transition h-28"
+                className="tv-focusable bg-[#1C1C1E] hover:bg-[#2C2C2E] focus:bg-[#FFFFFF] focus:text-[#0B0B0D] p-3 rounded-2xl flex flex-col items-center justify-center text-center shadow-md transition h-28"
               >
                 {ch.logo ? (
                   <img
@@ -183,7 +188,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
           <h3 className="text-xl font-black text-white mb-4">
             الأفلام ({results.vod.length})
           </h3>
-          <div className="grid grid-cols-4 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-4 lg:grid-cols-6 gap-x-7 gap-y-4 pt-2">
             {results.vod.map((item) => (
               <div
                 key={item.id}
@@ -193,9 +198,9 @@ export const SearchView: React.FC<SearchViewProps> = ({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') onSelectItem(item);
                 }}
-                className="tv-focusable flex flex-col cursor-pointer group focus:outline-none"
+                className="atv-item flex flex-col group"
               >
-                <div className="relative aspect-[2/3] w-full rounded-2xl overflow-hidden bg-[#212639] border-2 border-transparent group-focus:border-[#2FD3BF] group-focus:scale-105 transition">
+                <div className="atv-card aspect-[2/3] w-full">
                   {item.thumbnail_url ? (
                     <img
                       src={item.thumbnail_url}
@@ -208,7 +213,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                     </div>
                   )}
                 </div>
-                <span className="text-xs font-bold text-white mt-2 truncate w-full group-focus:text-[#2FD3BF] text-right">
+                <span className="text-xs font-bold text-white mt-2 truncate w-full group-focus:text-[#FFFFFF] text-right">
                   {item.title}
                 </span>
               </div>
@@ -223,7 +228,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
           <h3 className="text-xl font-black text-white mb-4">
             المسلسلات ({results.series.length})
           </h3>
-          <div className="grid grid-cols-4 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-4 lg:grid-cols-6 gap-x-7 gap-y-4 pt-2">
             {results.series.map((item) => (
               <div
                 key={item.id}
@@ -233,9 +238,9 @@ export const SearchView: React.FC<SearchViewProps> = ({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') onSelectItem(item);
                 }}
-                className="tv-focusable flex flex-col cursor-pointer group focus:outline-none"
+                className="atv-item flex flex-col group"
               >
-                <div className="relative aspect-[2/3] w-full rounded-2xl overflow-hidden bg-[#212639] border-2 border-transparent group-focus:border-[#2FD3BF] group-focus:scale-105 transition">
+                <div className="atv-card aspect-[2/3] w-full">
                   {item.thumbnail_url ? (
                     <img
                       src={item.thumbnail_url}
@@ -248,7 +253,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                     </div>
                   )}
                 </div>
-                <span className="text-xs font-bold text-white mt-2 truncate w-full group-focus:text-[#2FD3BF] text-right">
+                <span className="text-xs font-bold text-white mt-2 truncate w-full group-focus:text-[#FFFFFF] text-right">
                   {item.title}
                 </span>
               </div>
